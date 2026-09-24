@@ -31,6 +31,19 @@ export function browserSpeechProvider(): TranscriptionProvider {
           webkitSpeechRecognition?: new () => Recognition;
         });
   const Klass = win?.SpeechRecognition ?? win?.webkitSpeechRecognition;
+  function stop() {
+    const previous = recognition;
+    recognition = null;
+    if (!previous) return;
+    previous.onresult = null;
+    previous.onerror = null;
+    previous.onend = null;
+    try {
+      previous.stop();
+    } catch {
+      // A browser may already have ended the recording.
+    }
+  }
   return {
     supported: !!Klass,
     start(onText, onError, onEnd) {
@@ -41,27 +54,35 @@ export function browserSpeechProvider(): TranscriptionProvider {
         return;
       }
       try {
-        recognition?.stop();
+        stop();
         recognition = new Klass();
-        recognition.onend = () => onEnd?.();
+        const current = recognition;
+        recognition.onend = () => {
+          if (recognition !== current) return;
+          recognition = null;
+          onEnd?.();
+        };
         recognition.continuous = true;
         recognition.interimResults = false;
         recognition.onresult = (e) => {
+          if (recognition !== current) return;
           for (let i = e.resultIndex; i < e.results.length; i++)
             onText(e.results[i][0].transcript);
         };
-        recognition.onerror = (e) => onError(`Speech recognition: ${e.error}`);
+        recognition.onerror = (e) => {
+          if (recognition !== current) return;
+          stop();
+          onError(`Speech recognition: ${e.error}`);
+        };
         recognition.start();
       } catch {
+        stop();
         onError(
           "Could not start speech recognition. Check your microphone permission.",
         );
       }
     },
-    stop() {
-      recognition?.stop();
-      recognition = null;
-    },
+    stop,
   };
 }
 export const demoLines = [

@@ -55,7 +55,10 @@ export const mockAIProvider: AIProvider = {
               (m.title + " " + m.tags.join(" ")).toLowerCase().includes(w),
           ),
       )?.content || project;
-    const context = clip(relevant || resume || "your own experience", 150);
+    const context = clip(
+      relevant || resume || "your own experience",
+      150,
+    ).replace(/[.!?]+$/, "");
     let main =
       "Answer directly, then give one specific example from your experience.";
     if (intent === "introduction")

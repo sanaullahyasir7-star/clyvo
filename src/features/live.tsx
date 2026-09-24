@@ -270,6 +270,7 @@ export default function Live() {
         setError(err);
         setMicOn(false);
       },
+      () => setMicOn(false),
     );
   }
   async function startScreen() {
