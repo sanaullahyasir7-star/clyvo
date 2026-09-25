@@ -43,7 +43,7 @@ export default function Meetings() {
         ]
       : meeting.transcript;
     const { actions, decisions } = meetingNotes(notes);
-    const summary = `${meeting.title}. ${meeting.transcript.length} transcript lines. Key points: ${
+    const summary = `${meeting.title}. ${transcript.length} transcript lines. Key points: ${
       transcript
         .slice(0, 3)
         .map((t) => t.text)
