@@ -41,10 +41,14 @@ export default function Memory() {
       title: title.trim(),
       content: content.trim(),
       type,
-      tags: tags
-        .split(",")
-        .map((t) => t.trim())
-        .filter(Boolean),
+      tags: [
+        ...new Set(
+          tags
+            .split(",")
+            .map((t) => t.trim())
+            .filter(Boolean),
+        ),
+      ],
       createdAt: editing
         ? state.memories.find((x) => x.id === editing)?.createdAt || now()
         : now(),

@@ -12,7 +12,7 @@ export default function Feedback() {
   const [id, setId] = useState("");
   const completed = state.sessions.filter((s) => s.status === "completed");
   const target =
-    completed.find((s) => s.id === (params.get("id") || id)) || completed[0];
+    completed.find((s) => s.id === (id || params.get("id"))) || completed[0];
   return (
     <>
       <SectionTitle

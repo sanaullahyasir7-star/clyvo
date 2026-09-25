@@ -20,7 +20,7 @@ export default function Landing() {
       <main>
         <section className="hero">
           <div className="eyebrow">
-            <span className="dot" /> CLYVO WEB ALPHA
+            <span className="dot" /> CLYVO PUBLIC BETA
           </div>
           <h1>
             Be ready for every
@@ -28,8 +28,9 @@ export default function Landing() {
             <span>conversation.</span>
           </h1>
           <p>
-            Real-time context for interviews, meetings, and important
-            professional conversations. Your data stays in this browser.
+            Prepare for interviews, practice your answers, and organize meeting
+            notes. Free local guidance from your own experience. No API key
+            needed.
           </p>
           <div className="row">
             <Link className="button" href="/auth">
@@ -114,7 +115,13 @@ export default function Landing() {
           </Link>
         </section>
       </main>
-      <footer>CLYVO Web Alpha · Local-first conversation intelligence</footer>
+      <footer>
+        CLYVO Public Beta · Rule-based guidance, no generative AI.
+        <br />
+        <Link className="text-link" href="/help">
+          Help, privacy, and browser limitations
+        </Link>
+      </footer>
     </div>
   );
 }

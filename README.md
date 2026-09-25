@@ -37,7 +37,7 @@ Import this repository using the Next.js preset, with no environment variables. 
 
 ## Browser and product limitations
 
-This is a local-first Alpha, not cloud authentication. Screen sharing requires an explicit click and browser permission. Screen previews and snapshots are temporary; arbitrary screenshots are not analyzed by AI. SpeechRecognition varies by browser and may use the browser vendor's speech service. Manual questions and simulation remain available. The device selector controls the local audio monitor; speech recognition uses the browser's default microphone. Resume import accepts plain text and Markdown. Feedback is descriptive and rule-based, with no claimed precision score.
+This is a local-first Alpha, not cloud authentication. Screen sharing requires an explicit click and browser permission. Screen previews and snapshots are temporary; arbitrary screenshots are not analyzed by AI. SpeechRecognition varies by browser and may use the browser vendor's speech service. Manual questions and simulation remain available. The device selector controls the local audio monitor; speech recognition uses the browser's default microphone. CV import accepts text-based PDF (up to 30 pages), Word .docx, plain text and Markdown (up to 10 MB). Extraction runs in the browser, with an editable preview before applying. Scanned/image-only PDFs need OCR outside the app; legacy .doc must be resaved as .docx. No document HTML is rendered. PDF.js workers are copied locally during install/build. Feedback is descriptive and rule-based, with no claimed precision score.
 
 ## Brand
 
@@ -46,3 +46,9 @@ The written brand tokens and available product/UI and social/marketing boards we
 ## Upgrade paths
 
 Replace `AIProvider` with a real server-backed AI provider, `StorageProvider` with authenticated database storage, `TranscriptionProvider` with consent-based real-time transcription, and the manual screen interpreter with a multimodal provider. Before cloud use, add authentication, access control, server-side secrets, retention controls, durable migrations and provider failure handling.
+
+## Public beta update
+
+The public beta adds `/help`, optional profile email, visible save status, previous-snapshot recovery, paused saving on cross-tab conflicts, 5 MB import limits, autosaved practice and meeting drafts, interview-specific question banks, explicit meeting action/decision classification, and evidence-oriented answer structure checks. External font requests were removed; the app uses installed font fallbacks.
+
+`npm test` includes regression checks for quota failures, stale-tab writes, backup recovery, unsupported imports, speech callback races, screen-capture cancellation and external end events. These browser-adapter tests use simulated APIs; they do not certify real microphone permissions or hardware support. Public-beta guidance remains deterministic, with no generative model, semantic answer grading, cloud accounts, or screen interpretation.

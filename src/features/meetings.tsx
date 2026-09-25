@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Activity, ArrowRight, ChevronRight } from "lucide-react";
 import { useApp } from "@/providers/app";
+import { meetingNotes } from "@/providers/review";
 import { SessionType, now, uid } from "@/lib/model";
 import {
   Button,
@@ -21,8 +22,8 @@ export default function Meetings() {
   const [title, setTitle] = useState("");
   const [participants, setParticipants] = useState(draft?.participants || "");
   const [context, setContext] = useState(draft?.context || "");
-  const [note, setNote] = useState("");
-  const [line, setLine] = useState("");
+  const [note, setNote] = useState(draft?.draftNote || "");
+  const [line, setLine] = useState(draft?.draftLine || "");
   const [meeting, setMeeting] = useState<SessionType | null>(draft || null);
   const [demo, setDemo] = useState(0);
   useEffect(() => {
@@ -34,16 +35,26 @@ export default function Meetings() {
   }, [meeting, update]);
   function finish() {
     if (!meeting) return;
-    const actions = meeting.notes.filter((n) => /action|follow|next/i.test(n));
-    const decisions = meeting.notes.filter((n) => /decid|agreed/i.test(n));
+    const notes = note.trim() ? [...meeting.notes, note.trim()] : meeting.notes;
+    const transcript = line.trim()
+      ? [
+          ...meeting.transcript,
+          { id: uid(), at: now(), speaker: "Participant", text: line.trim() },
+        ]
+      : meeting.transcript;
+    const { actions, decisions } = meetingNotes(notes);
     const summary = `${meeting.title}. ${meeting.transcript.length} transcript lines. Key points: ${
-      meeting.transcript
+      transcript
         .slice(0, 3)
         .map((t) => t.text)
         .join(" ") || "No transcript recorded."
     } Decisions: ${decisions.join("; ") || "None recorded."} Action items: ${actions.join("; ") || "None recorded."} Participants: ${participants || "not specified"}. Context: ${context || "not specified"}.`;
     const ended = {
       ...meeting,
+      notes,
+      transcript,
+      draftNote: "",
+      draftLine: "",
       durationSeconds: Math.max(
         0,
         Math.floor((Date.now() - new Date(meeting.startedAt).getTime()) / 1000),
@@ -60,6 +71,8 @@ export default function Meetings() {
       sessions: [ended, ...s.sessions.filter((x) => x.id !== ended.id)],
     }));
     setMeeting(null);
+    setNote("");
+    setLine("");
     setDemo(0);
   }
   const lines = [
@@ -105,6 +118,7 @@ export default function Meetings() {
                   m
                     ? {
                         ...m,
+                        draftLine: "",
                         transcript: [
                           ...m.transcript,
                           {
@@ -123,7 +137,12 @@ export default function Meetings() {
               <input
                 aria-label="Meeting transcript line"
                 value={line}
-                onChange={(e) => setLine(e.target.value)}
+                onChange={(e) => {
+                  setLine(e.target.value);
+                  setMeeting((m) =>
+                    m ? { ...m, draftLine: e.target.value } : m,
+                  );
+                }}
                 placeholder="Add a transcript line"
               />
               <Button type="submit">Add</Button>
@@ -159,13 +178,23 @@ export default function Meetings() {
           </Card>
           <Card>
             <h3>Notes and decisions</h3>
-            <Field label="New note" value={note} onChange={setNote} multiline />
+            <Field
+              label="New note"
+              value={note}
+              onChange={(v) => {
+                setNote(v);
+                setMeeting((m) => (m ? { ...m, draftNote: v } : m));
+              }}
+              multiline
+            />
             <Button
               variant="secondary"
               onClick={() => {
                 if (note.trim())
                   setMeeting((m) =>
-                    m ? { ...m, notes: [...m.notes, note] } : null,
+                    m
+                      ? { ...m, draftNote: "", notes: [...m.notes, note] }
+                      : null,
                   );
                 setNote("");
               }}

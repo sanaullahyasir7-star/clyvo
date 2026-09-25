@@ -34,17 +34,33 @@ export default function Auth() {
       <div className="auth-form">
         <ClyvoAppIcon />
         <h2>Open CLYVO</h2>
-        <p>Local profile · No password or cloud account</p>
+        <p>Free local workspace · No password or cloud account</p>
+        <p className="small-text">
+          Use a nickname if you prefer. Email is optional and is not verified or
+          used for sign-in. This browser stores your work; export a backup to
+          keep it.
+        </p>
+        {state.onboarding && (
+          <Link className="button secondary" href="/dashboard">
+            Return to my workspace
+          </Link>
+        )}
         <form
           onSubmit={(e) => {
             e.preventDefault();
-            if (!name.trim() || !email.includes("@")) {
-              setError("Enter your name and a valid email.");
+            if (
+              !name.trim() ||
+              (email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()))
+            ) {
+              setError(
+                "Enter your name. If you add an email, use a valid address.",
+              );
               return;
             }
             update((s) => ({
               ...s,
               user: {
+                ...s.user,
                 name: name.trim(),
                 email: email.trim(),
                 role: role.trim(),
@@ -64,7 +80,7 @@ export default function Auth() {
             placeholder="Your name"
           />
           <Field
-            label="Email"
+            label="Email (optional)"
             value={email}
             onChange={setEmail}
             placeholder="you@example.com"

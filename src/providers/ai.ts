@@ -1,3 +1,4 @@
+import { reviewAnswer } from "./review";
 import { AppState, ResponseType, SessionType, uid, now } from "@/lib/model";
 export interface AIProvider {
   answer(
@@ -118,19 +119,64 @@ export const mockAIProvider: AIProvider = {
     };
   },
   prepare(role, company, type) {
-    return [
-      `Tell me about yourself and why ${role} interests you.`,
-      `Describe a project that prepares you for ${role}.`,
-      `What challenge did you face and how did you handle it?`,
-      `Why do you want to work at ${company || "this company"}?`,
-      type === "Technical"
-        ? "Explain a technical decision and its tradeoffs."
-        : "Tell me about a time you worked with others.",
-    ];
+    const target = role.trim() || "this role";
+    const employer = company.trim() || "this company";
+    const banks: Record<string, string[]> = {
+      Behavioral: [
+        "Tell me about a difficult situation and the action you took.",
+        "Describe a disagreement and how you handled it.",
+        "Tell me about a time you had to change your plan.",
+        "Describe a mistake, its impact, and what you learned.",
+        "How did you help a team deliver something important?",
+      ],
+      Technical: [
+        `Walk through a technical project relevant to ${target}.`,
+        "Explain a technical decision, the alternatives, and your tradeoffs.",
+        "How did you test correctness and handle failures?",
+        "Describe how you investigated a difficult bug.",
+        "What would you improve in your implementation and why?",
+      ],
+      Coding: [
+        "Given a list of numbers and a target, explain how you would find two entries whose sum equals the target.",
+        "How would you detect repeated values in a large dataset? Explain time and space costs.",
+        "Explain a solution for finding the first non-repeating character in a string.",
+        "How would you test an algorithm against empty input, duplicates, and boundary values?",
+        "Compare a simple solution with a faster one. When is the extra complexity justified?",
+      ],
+      "System Design": [
+        "Design a URL shortener. Start with requirements and scale assumptions.",
+        "Describe the API, data model, and request flow for your design.",
+        "How would your design handle retries and duplicate requests?",
+        "Which component would become a bottleneck first, and how would you measure it?",
+        "Explain your consistency, availability, privacy, and recovery tradeoffs.",
+      ],
+      HR: [
+        `Why are you interested in ${target} at ${employer}?`,
+        "What working environment helps you do your best work?",
+        "How do you prioritize competing deadlines?",
+        "What are your availability and expectations for this role?",
+        "What would you like to ask the hiring team?",
+      ],
+      Mixed: [
+        `Tell me about yourself and why ${target} interests you.`,
+        `Describe a project that prepares you for ${target}.`,
+        "What challenge did you face and how did you handle it?",
+        `Why do you want to work at ${employer}?`,
+        "Explain a decision you made and how you evaluated the result.",
+      ],
+    };
+    return banks[type] || banks.Mixed;
   },
   feedback(session) {
     const count = session.transcript.filter((x) => x.speaker === "You").length;
+    const review = reviewAnswer(
+      session.transcript
+        .filter((x) => x.speaker === "You")
+        .map((x) => x.text)
+        .join(" "),
+    );
     return [
+      ...(count ? [...review.observations, ...review.nextSteps] : []),
       `${session.questions.length} question${session.questions.length === 1 ? "" : "s"} recorded.`,
       count
         ? `You contributed ${count} transcript segment${count === 1 ? "" : "s"}. Review them for clear examples.`

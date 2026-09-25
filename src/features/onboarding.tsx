@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight } from "lucide-react";
 import { useApp } from "@/providers/app";
+import { ResumeImport } from "@/components/resume-import";
 import { sampleState } from "@/lib/model";
 import { ClyvoLogo } from "@/components/brand";
 import { Button, Field } from "@/components/ui";
@@ -70,17 +71,7 @@ export default function Onboarding() {
             multiline
             placeholder="Your real work and skills"
           />
-          <label className="field">
-            <span>Import resume text (.txt or .md)</span>
-            <input
-              type="file"
-              accept=".txt,.md,text/plain,text/markdown"
-              onChange={async (e) => {
-                const file = e.target.files?.[0];
-                if (file && file.size < 200000) setResume(await file.text());
-              }}
-            />
-          </label>
+          <ResumeImport onApply={setResume} />
           <Field
             label="Job description"
             value={job}

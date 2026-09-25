@@ -23,6 +23,7 @@ import {
 import { useApp } from "@/providers/app";
 import { ClyvoIndicator, ClyvoLogo } from "@/components/brand";
 import { Empty } from "@/components/ui";
+import Help from "@/features/help";
 import Auth from "@/features/auth";
 import Onboarding from "@/features/onboarding";
 import Dashboard from "@/features/dashboard";
@@ -35,7 +36,7 @@ import HistoryPage from "@/features/history";
 import Feedback from "@/features/feedback";
 import SettingsPage from "@/features/settings";
 export function AppScreen({ section }: { section: string }) {
-  const { state, ready, error, setError } = useApp();
+  const { state, ready, error, setError, saveStatus } = useApp();
   const router = useRouter();
   const prefersReducedMotion = useReducedMotion();
   const [menu, setMenu] = useState(false);
@@ -52,7 +53,7 @@ export function AppScreen({ section }: { section: string }) {
     return () => document.removeEventListener("keydown", onKey);
   }, []);
   useEffect(() => {
-    if (!ready) return;
+    if (!ready || section === "help") return;
     if (section !== "auth" && !state.user) router.replace("/auth");
     else if (
       section !== "auth" &&
@@ -62,6 +63,7 @@ export function AppScreen({ section }: { section: string }) {
     )
       router.replace("/onboarding");
   }, [ready, section, state.user, state.onboarding, router]);
+  if (section === "help") return <Help />;
   if (!ready)
     return (
       <div className="center-page">
@@ -92,6 +94,9 @@ export function AppScreen({ section }: { section: string }) {
     <div
       className={`app-shell ${state.settings.reducedMotion ? "reduce-motion" : ""}`}
     >
+      <a className="skip-link" href="#main-content">
+        Skip to content
+      </a>
       <aside className={`sidebar ${menu ? "open" : ""}`}>
         <Link
           href="/dashboard"
@@ -106,6 +111,7 @@ export function AppScreen({ section }: { section: string }) {
             <Link
               key={path}
               href={`/${path}`}
+              aria-current={path === section ? "page" : undefined}
               className={`nav-item ${path === section ? "selected" : ""}`}
               onClick={() => setMenu(false)}
             >
@@ -115,6 +121,9 @@ export function AppScreen({ section }: { section: string }) {
           ))}
         </nav>
         <div className="sidebar-bottom">
+          <Link className="text-link" href="/help">
+            Help and privacy
+          </Link>
           <div className="local-tag">
             <ShieldCheck size={15} /> Local browser data
           </div>
@@ -146,7 +155,12 @@ export function AppScreen({ section }: { section: string }) {
           </div>
           <div className="top-right">
             <span className="status">
-              <span className="dot" /> Ready
+              <span className="dot" />{" "}
+              {saveStatus === "saved"
+                ? "Saved locally"
+                : saveStatus === "error"
+                  ? "Not saved"
+                  : "Saving…"}
             </span>
             <span className="avatar" title={state.user.name}>
               {state.user.name[0]?.toUpperCase()}
@@ -162,6 +176,8 @@ export function AppScreen({ section }: { section: string }) {
           </div>
         )}
         <motion.main
+          id="main-content"
+          tabIndex={-1}
           className="content"
           key={section}
           initial={{ opacity: 0 }}

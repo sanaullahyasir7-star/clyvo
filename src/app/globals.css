@@ -1,4 +1,3 @@
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Manrope:wght@600;700&display=swap");
 @tailwind utilities;
 :root {
   --bg: #08090b;
@@ -1582,4 +1581,71 @@ mark {
 }
 .highlight-record {
   outline: 2px solid var(--iris);
+}
+.help-page {
+  max-width: 1140px;
+  margin: auto;
+  padding: 32px 24px 80px;
+}
+.help-page header {
+  margin-bottom: 40px;
+  justify-content: space-between;
+}
+.help-page li {
+  margin-bottom: 12px;
+  color: var(--steel);
+}
+.help-page details {
+  border-bottom: 1px solid var(--border);
+  padding: 14px 0;
+}
+.help-page summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.help-page details p {
+  margin: 12px 0 0;
+}
+.recovery-card {
+  max-width: 660px;
+  margin: 20px;
+}
+.skip-link {
+  position: fixed;
+  top: -100px;
+  left: 20px;
+  z-index: 100;
+  background: var(--fog);
+  color: var(--bg);
+  padding: 12px;
+}
+.skip-link:focus {
+  top: 12px;
+}
+.card,
+.note,
+.transcript,
+.list-card,
+.answer-body {
+  overflow-wrap: anywhere;
+}
+@media (max-width: 760px) {
+  .help-page .two-col {
+    grid-template-columns: 1fr;
+  }
+}
+
+.resume-import {
+  grid-column: 1 / -1;
+  padding: 16px;
+  margin: 0 0 18px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  min-width: 0;
+}
+.resume-import input[type="file"] {
+  max-width: 100%;
+}
+.resume-import textarea {
+  min-height: 220px;
 }

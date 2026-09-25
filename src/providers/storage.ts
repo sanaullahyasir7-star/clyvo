@@ -68,22 +68,36 @@ export function createStorage(storage: Storage): StorageProvider {
     save(state) {
       const valid = State.parse(state);
       const snapshot = JSON.stringify(valid);
+      const previous = storage.getItem("clyvo:state");
+      if (previous === snapshot) return;
+      // Keep a valid prior snapshot. Backup failure must not prevent a primary save.
+      if (previous) {
+        try {
+          migrateState(JSON.parse(previous));
+          storage.setItem("clyvo:backup", previous);
+        } catch {}
+      }
       storage.setItem("clyvo:state", snapshot);
       for (const [key, name] of Object.entries(storageKeys)) {
-        storage.setItem(
-          name,
-          JSON.stringify(
-            key === "meetings"
-              ? valid.sessions.filter((s) => s.type === "meeting")
-              : valid[key as keyof AppState],
-          ),
-        );
+        try {
+          storage.setItem(
+            name,
+            JSON.stringify(
+              key === "meetings"
+                ? valid.sessions.filter((s) => s.type === "meeting")
+                : valid[key as keyof AppState],
+            ),
+          );
+        } catch {
+          /* The complete snapshot above remains authoritative. */
+        }
       }
     },
     clear() {
       for (const name of Object.values(storageKeys)) storage.removeItem(name);
       storage.removeItem("clyvo:state");
       storage.removeItem("clyvo:corrupt-backup");
+      storage.removeItem("clyvo:backup");
     },
   };
 }
@@ -106,7 +120,11 @@ export const localStorageProvider: StorageProvider = {
   },
 };
 export function parseImport(raw: string): AppState {
+  if (new TextEncoder().encode(raw).length > 5 * 1024 * 1024)
+    throw new Error("Import files must be 5 MB or smaller.");
   const data = JSON.parse(raw);
+  if (!data || typeof data !== "object" || Array.isArray(data))
+    throw new Error("Expected a CLYVO export object.");
   if (data.schemaVersion !== CURRENT_SCHEMA_VERSION)
     throw new Error("Unsupported export version");
   return migrateState({ ...data, user: data.user ?? data.profile ?? null });
@@ -133,4 +151,24 @@ export function mergeStates(current: AppState, incoming: AppState): AppState {
     prep: merge(current.prep, incoming.prep),
     activeSessionId: current.activeSessionId ?? incoming.activeSessionId,
   });
+}
+
+export class StorageConflictError extends Error {}
+export function saveIfUnchanged(
+  storage: Storage,
+  state: AppState,
+  expected: string | null,
+) {
+  if (storage.getItem("clyvo:state") !== expected)
+    throw new StorageConflictError("Another tab changed this workspace.");
+  createStorage(storage).save(state);
+  return storage.getItem("clyvo:state");
+}
+export function readBackup(storage: Storage): AppState | null {
+  try {
+    const raw = storage.getItem("clyvo:backup");
+    return raw ? migrateState(JSON.parse(raw)) : null;
+  } catch {
+    return null;
+  }
 }

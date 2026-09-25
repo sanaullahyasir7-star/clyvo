@@ -248,6 +248,7 @@ export default function Live() {
     setMicOn(false);
     screenProvider.current.stop();
     setStream(null);
+    setSnapshot("");
     setScreenState("off");
     setDemoPlaying(false);
   }
@@ -277,6 +278,7 @@ export default function Live() {
     try {
       const result = await screenProvider.current.start(() => {
         setStream(null);
+        setSnapshot("");
         setScreenState("ended");
       });
       setStream(result);
@@ -593,6 +595,10 @@ export default function Live() {
                 ? "Browser speech recognition available"
                 : "Manual and simulated input available"}
             </small>
+            <p className="small-text muted">
+              Speech may be processed by your browser’s speech service. Get
+              participants’ permission before transcribing.
+            </p>
             <span className="eyebrow">SCREEN CONTEXT</span>
             <button
               className="outline-action"
@@ -600,6 +606,7 @@ export default function Live() {
                 screenState === "active" || screenState === "paused"
                   ? (screenProvider.current.stop(),
                     setScreenState("off"),
+                    setSnapshot(""),
                     setStream(null))
                   : startScreen()
               }
@@ -636,10 +643,18 @@ export default function Live() {
                   </button>
                   <button
                     onClick={() => {
-                      if (video.current)
-                        setSnapshot(
-                          screenProvider.current.snapshot(video.current),
+                      try {
+                        if (video.current)
+                          setSnapshot(
+                            screenProvider.current.snapshot(video.current),
+                          );
+                      } catch (e) {
+                        setError(
+                          e instanceof Error
+                            ? e.message
+                            : "Snapshot unavailable.",
                         );
+                      }
                     }}
                   >
                     Snapshot

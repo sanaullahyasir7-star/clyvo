@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { AppScreen } from "@/components/screens";
 export function generateStaticParams() {
   return [
+    "help",
     "auth",
     "onboarding",
     "dashboard",

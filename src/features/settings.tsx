@@ -4,12 +4,19 @@ import { useRouter } from "next/navigation";
 import { Download, Trash2, Upload } from "lucide-react";
 import { useApp } from "@/providers/app";
 import { AppState } from "@/lib/model";
-import { parseImport, mergeStates, exportState } from "@/providers/storage";
+import {
+  parseImport,
+  mergeStates,
+  exportState,
+  readBackup,
+} from "@/providers/storage";
+import { ResumeImport } from "@/components/resume-import";
 import { AudioMonitor } from "@/components/audio";
 import { Button, Card, SectionTitle, Field, download } from "@/components/ui";
 export default function SettingsPage() {
   const { state, update, replace, clear, setError } = useApp();
   const router = useRouter();
+  const [message, setMessage] = useState("");
   const [importText, setImportText] = useState("");
   const [preview, setPreview] = useState<AppState | null>(null);
   const [selectedFile, setSelectedFile] = useState("");
@@ -22,6 +29,7 @@ export default function SettingsPage() {
       `clyvo-export-${new Date().toISOString().slice(0, 10)}.json`,
       JSON.stringify(exportState(state), null, 2),
     );
+    setMessage("Backup download requested. Keep the JSON file somewhere safe.");
   }
   return (
     <>
@@ -29,6 +37,7 @@ export default function SettingsPage() {
         title="Settings"
         subtitle="Shape your workspace and control local data."
       />
+      {message && <p role="status">{message}</p>}
       <div className="settings-grid">
         <Card>
           <h2>Profile</h2>
@@ -49,6 +58,14 @@ export default function SettingsPage() {
               update((s) => ({
                 ...s,
                 user: s.user ? { ...s.user, role: v } : null,
+              }))
+            }
+          />
+          <ResumeImport
+            onApply={(resume) =>
+              update((s) => ({
+                ...s,
+                user: s.user ? { ...s.user, resume } : null,
               }))
             }
           />
@@ -120,6 +137,27 @@ export default function SettingsPage() {
           <Button variant="secondary" onClick={exportData}>
             <Download size={16} /> Export JSON
           </Button>
+          <Button
+            variant="secondary"
+            onClick={() => {
+              const backup = readBackup(window.localStorage);
+              if (!backup) {
+                setMessage("No previous backup is available yet.");
+                return;
+              }
+              setPreview(backup);
+              setImportText(JSON.stringify(exportState(backup)));
+              setSelectedFile("Previous local snapshot");
+              setMode("replace");
+            }}
+          >
+            Review previous backup
+          </Button>
+          <p className="small-text">
+            A previous local snapshot is kept when space permits. It is not a
+            cloud backup. Download JSON regularly, especially before clearing
+            browser data.
+          </p>
           <label className="field file-input">
             <span>Import JSON</span>
             <input
@@ -130,6 +168,8 @@ export default function SettingsPage() {
                 if (!file) return;
                 setSelectedFile(file.name);
                 try {
+                  if (file.size > 5 * 1024 * 1024)
+                    throw new Error("File too large");
                   const raw = await file.text();
                   setImportText(raw);
                   setPreview(parseImport(raw));
@@ -137,7 +177,7 @@ export default function SettingsPage() {
                 } catch {
                   setPreview(null);
                   setError(
-                    "Invalid CLYVO JSON file. Your current data was not changed.",
+                    "Choose a valid CLYVO JSON export up to 5 MB. Your current data was not changed.",
                   );
                 }
               }}
@@ -172,6 +212,9 @@ export default function SettingsPage() {
                         ? mergeStates(state, incoming)
                         : { ...incoming, activeSessionId: null },
                     );
+                    setMessage(
+                      "Import applied. Check the saved status above before closing this tab.",
+                    );
                     setPreview(null);
                     setImportText("");
                     setSelectedFile("");
@@ -199,8 +242,7 @@ export default function SettingsPage() {
                   "Delete all CLYVO local data? This cannot be undone.",
                 )
               ) {
-                clear();
-                router.push("/auth");
+                if (clear()) router.push("/auth");
               }
             }}
           >

@@ -35,6 +35,10 @@ export const Session = z.object({
   notes: z.array(z.string()),
   summary: z.string(),
   feedbackId: z.string().optional(),
+  practiceQuestions: z.array(z.string()).optional(),
+  draftAnswer: z.string().optional(),
+  draftNote: z.string().optional(),
+  draftLine: z.string().optional(),
   participants: z.string().optional(),
   context: z.string().optional(),
   decisions: z.array(z.string()).default([]),
@@ -73,7 +77,7 @@ export const Prep = z.object({
 });
 export const User = z.object({
   name: z.string(),
-  email: z.string().email(),
+  email: z.union([z.string().email(), z.literal("")]),
   role: z.string(),
   goal: z.string(),
   resume: z.string(),

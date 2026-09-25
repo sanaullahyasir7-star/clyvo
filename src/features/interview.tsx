@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowRight } from "lucide-react";
 import { useApp } from "@/providers/app";
 import { PrepType, SessionType, now, uid } from "@/lib/model";
+import { reviewAnswer } from "@/providers/review";
 import { mockAIProvider } from "@/providers/ai";
 import { browserSpeechProvider } from "@/providers/transcription";
 import {
@@ -28,8 +29,12 @@ export default function Interview() {
   const [difficulty, setDifficulty] = useState("Standard");
   const practiceSpeech = useRef(browserSpeechProvider());
   useEffect(() => () => practiceSpeech.current.stop(), []);
-  const [context, setContext] = useState(state.user?.companyContext || "");
-  const [projects, setProjects] = useState(state.user?.projects || "");
+  const [context, setContext] = useState(
+    saved?.companyContext || state.user?.companyContext || "",
+  );
+  const [projects, setProjects] = useState(
+    saved?.projects || state.user?.projects || "",
+  );
   const [kind, setKind] = useState(
     saved?.interviewType || state.user?.interviewType || "Mixed",
   );
@@ -38,7 +43,8 @@ export default function Interview() {
   );
   const [practice, setPractice] = useState(!!draft);
   const [index, setIndex] = useState(draft?.questions.length || 0);
-  const [answer, setAnswer] = useState("");
+  const [answer, setAnswer] = useState(draft?.draftAnswer || "");
+  const answerRef = useRef(answer);
   const [responses, setResponses] = useState<string[]>(
     draft?.transcript.filter((t) => t.speaker === "You").map((t) => t.text) ||
       [],
@@ -59,7 +65,28 @@ export default function Interview() {
   const latest =
     state.prep.find((p) => p.id === params.get("id")) || state.prep[0];
   const questions =
-    latest?.questions || mockAIProvider.prepare(role, company, kind);
+    practiceSession?.practiceQuestions ||
+    latest?.questions ||
+    mockAIProvider.prepare(role, company, kind);
+  const review = reviewAnswer(responses.at(-1) || "");
+  function changeAnswer(value: string) {
+    answerRef.current = value;
+    setAnswer(value);
+    setPracticeSession((s) =>
+      s
+        ? { ...s, draftAnswer: value }
+        : {
+            ...createSession(
+              "interview",
+              `Practice: ${role || "Interview"}`,
+              company,
+              role,
+            ),
+            practiceQuestions: [...questions],
+            draftAnswer: value,
+          },
+    );
+  }
   function prepare() {
     const p: PrepType = {
       id: uid(),
@@ -79,6 +106,7 @@ export default function Interview() {
       user: s.user ? { ...s.user, companyContext: context, projects } : null,
     }));
     setIndex(0);
+    router.replace(`/interview?id=${p.id}`);
   }
   function savePractice() {
     const s =
@@ -89,8 +117,10 @@ export default function Interview() {
         company,
         role,
       );
+    practiceSpeech.current.stop();
     const finished = {
       ...s,
+      draftAnswer: "",
       status: "completed" as const,
       endedAt: now(),
       durationSeconds: Math.max(
@@ -108,6 +138,8 @@ export default function Interview() {
     setPracticeSession(null);
     setResponses([]);
     setIndex(0);
+    setAnswer("");
+    router.push(`/feedback?id=${finished.id}`);
   }
   return (
     <>
@@ -115,7 +147,13 @@ export default function Interview() {
         title="Interview preparation"
         subtitle="Build a useful brief before the conversation."
         action={
-          <Button variant="secondary" onClick={() => setPractice((v) => !v)}>
+          <Button
+            variant="secondary"
+            onClick={() => {
+              practiceSpeech.current.stop();
+              setPractice((v) => !v);
+            }}
+          >
             {practice ? "Back to prep" : "Practice mode"}{" "}
             <ArrowRight size={16} />
           </Button>
@@ -128,7 +166,16 @@ export default function Interview() {
               QUESTION {Math.min(index + 1, questions.length)} /{" "}
               {questions.length}
             </span>
-            <h2>{questions[Math.min(index, questions.length - 1)]}</h2>
+            <h2>
+              {responses.length >= questions.length
+                ? "All questions answered"
+                : questions[Math.min(index, questions.length - 1)]}
+            </h2>
+            <p className="small-text muted">
+              Draft answers save locally as you type. Dictation may use your
+              browser’s speech service. This is a structure review, not a
+              technical correctness check.
+            </p>
             <label className="field">
               <span>Difficulty</span>
               <select
@@ -148,7 +195,7 @@ export default function Interview() {
             <Field
               label="Your response"
               value={answer}
-              onChange={setAnswer}
+              onChange={changeAnswer}
               multiline
               placeholder="Write your own answer here."
             />
@@ -157,7 +204,7 @@ export default function Interview() {
                 variant="secondary"
                 onClick={() =>
                   practiceSpeech.current.start(
-                    (t) => setAnswer((a) => a + " " + t),
+                    (t) => changeAnswer(answerRef.current + " " + t),
                     setError,
                   )
                 }
@@ -175,6 +222,7 @@ export default function Interview() {
                   !answer.trim() || responses.length >= questions.length
                 }
                 onClick={() => {
+                  practiceSpeech.current.stop();
                   const q = questions[index];
                   const response = mockAIProvider.answer(q, state);
                   const s =
@@ -187,6 +235,8 @@ export default function Interview() {
                     );
                   setPracticeSession({
                     ...s,
+                    draftAnswer: "",
+                    practiceQuestions: [...questions],
                     transcript: [
                       ...s.transcript,
                       { id: uid(), at: now(), speaker: "You", text: answer },
@@ -195,15 +245,16 @@ export default function Interview() {
                     responses: [...s.responses, response],
                   });
                   setResponses([...responses, answer]);
+                  answerRef.current = "";
                   setAnswer("");
-                  setIndex(Math.min(index + 1, questions.length - 1));
+                  setIndex(index + 1);
                 }}
               >
                 Save answer & next
               </Button>
               <Button
                 variant="secondary"
-                disabled={!responses.length}
+                disabled={!responses.length || !!answer.trim()}
                 onClick={savePractice}
               >
                 Finish practice
@@ -214,11 +265,17 @@ export default function Interview() {
             <h3>Practice feedback</h3>
             {responses.length ? (
               <>
-                <div className="note">
-                  {responses.at(-1)!.trim().split(/\s+/).length < 30
-                    ? "Your last answer is brief. Add one concrete example and explain your own action."
-                    : "Your answer contains detail. Check that the main point comes first and remove repeated phrases."}
-                </div>
+                <p className="muted">Text checks only · {review.words} words</p>
+                {review.observations.map((item) => (
+                  <div className="note" key={item}>
+                    {item}
+                  </div>
+                ))}
+                {review.nextSteps.map((item) => (
+                  <div className="note" key={item}>
+                    {item}
+                  </div>
+                ))}
                 <p>
                   You have answered {responses.length} question
                   {responses.length === 1 ? "" : "s"}.
@@ -233,7 +290,7 @@ export default function Interview() {
                   because [reason]. The result was [verified outcome].”
                 </p>
                 <strong>Follow-up</strong>
-                <p>How did you decide whether your approach worked?</p>
+                <p>{review.followUp}</p>
               </>
             ) : (
               <Empty
@@ -299,7 +356,7 @@ export default function Interview() {
                   multiline
                 />
               </div>
-              <Button onClick={prepare}>
+              <Button disabled={!role.trim()} onClick={prepare}>
                 Generate local prep <ArrowRight size={16} />
               </Button>
             </Card>
