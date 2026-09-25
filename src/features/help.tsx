@@ -43,11 +43,9 @@ export default function Help() {
           </p>
         </Card>
         <Card>
-          <h2>Local guidance, not a language model</h2>
+          <h2>Optional free local AI</h2>
           <p>
-            CLYVO uses rules, question templates, and the context you save. It
-            does not call a generative AI service, verify facts, grade technical
-            correctness, or predict interview outcomes.
+            Live offers an optional Qwen2.5 1.5B model through WebLLM. Enable it in Live to download model files from Hugging Face and MLC. It requires WebGPU, roughly 1 GB of download and around 2 GB of GPU memory. CV context and questions are processed on your device for answer generation. Downloads expose ordinary network information to those hosts. Without the model, clearly labeled template guidance remains available. Neither mode verifies facts or predicts interview outcomes.
           </p>
           <p>
             Review prompts help you check structure and evidence. They are not

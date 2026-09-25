@@ -116,7 +116,7 @@ export default function Landing() {
         </section>
       </main>
       <footer>
-        CLYVO Public Beta · Rule-based guidance, no generative AI.
+        CLYVO Public Beta · Optional on-device AI in Live. No API key needed.
         <br />
         <Link className="text-link" href="/help">
           Help, privacy, and browser limitations
