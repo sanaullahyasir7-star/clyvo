@@ -24,13 +24,23 @@ export class LocalAI {
     this.dispose();
     const version = this.version;
     if (!("gpu" in navigator)) throw new Error("This browser does not expose WebGPU. Try a WebGPU-capable desktop browser with hardware acceleration, or use template guidance.");
+    const gpu = (navigator as Navigator & { gpu: { requestAdapter: () => Promise<unknown> } }).gpu;
+    if (!await gpu.requestAdapter()) throw new Error("No usable WebGPU adapter was found. Enable hardware acceleration and try a supported desktop device. Template guidance remains available.");
+    if (version !== this.version) throw new Error("Model loading cancelled.");
     const { CreateWebWorkerMLCEngine } = await import("@mlc-ai/web-llm");
     if (version !== this.version) throw new Error("Model loading cancelled.");
     const worker = new Worker(new URL("./local-ai.worker.ts", import.meta.url), { type: "module" });
     this.worker = worker;
-    const engine = await CreateWebWorkerMLCEngine(worker, LOCAL_MODEL, {
-      initProgressCallback: report => { if (version === this.version) progress(report.text); },
-    });
+    let engine: WebWorkerMLCEngine;
+    try {
+      engine = await CreateWebWorkerMLCEngine(worker, LOCAL_MODEL, {
+        initProgressCallback: report => { if (version === this.version) progress(report.text); },
+      });
+    } catch (error) {
+      worker.terminate();
+      const detail = error instanceof Error ? error.message : typeof error === "string" ? error : "Check WebGPU, GPU memory, and access to the model download hosts.";
+      throw new Error(`Local AI could not start: ${detail.slice(0, 600)}`);
+    }
     if (version !== this.version) { worker.terminate(); throw new Error("Model loading cancelled."); }
     this.engine = engine;
   }

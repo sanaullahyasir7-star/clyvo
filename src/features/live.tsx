@@ -418,7 +418,7 @@ export default function Live() {
           <h2>Start a conversation</h2>
           <p>
             Ask manually, use browser speech recognition, or play a simulated
-            interview. Enable free local AI below for generated answers from your CV.
+            interview. Enable free local AI above for generated answers from your CV.
           </p>
           <Field label="Session title" value={title} onChange={setTitle} />
           <Button onClick={start}>
