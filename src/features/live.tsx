@@ -19,6 +19,7 @@ import { MemoryType, now, uid } from "@/lib/model";
 import { LocalAI, answerMessages } from "@/providers/local-ai";
 import { LocalAIControls } from "@/components/local-ai-controls";
 import { mockAIProvider } from "@/providers/ai";
+import { createTabAudioProvider, type TabAudioStatus } from "@/providers/tab-audio";
 import { browserSpeechProvider, demoLines } from "@/providers/transcription";
 import {
   browserScreenProvider,
@@ -96,6 +97,25 @@ export default function Live() {
   const [demoPlaying, setDemoPlaying] = useState(false);
   const [demoSpeed, setDemoSpeed] = useState(1);
   const [micOn, setMicOn] = useState(false);
+  const [tabAudioStatus, setTabAudioStatus] = useState<TabAudioStatus>("off");
+  const [tabAudioError, setTabAudioError] = useState("");
+  const tabAudioProvider = useRef<ReturnType<typeof createTabAudioProvider> | null>(null);
+  function stopTabAudio() {
+    tabAudioProvider.current?.stop();
+    setTabAudioStatus("off");
+    if (speechTimer.current) clearTimeout(speechTimer.current);
+    speechBuffer.current = "";
+  }
+  function toggleTabAudio() {
+    if (tabAudioStatus !== "off") { stopTabAudio(); return; }
+    if (active?.status !== "active") return;
+    speechProvider.current.stop(); setMicOn(false);
+    if (speechTimer.current) clearTimeout(speechTimer.current);
+    speechBuffer.current = "";
+    setTabAudioError("");
+    tabAudioProvider.current ??= createTabAudioProvider();
+    void tabAudioProvider.current.start(receiveSpeech, setTabAudioStatus, setTabAudioError);
+  }
   const [screenState, setScreenState] = useState<
     "off" | "active" | "paused" | "ended" | "error"
   >("off");
@@ -130,6 +150,8 @@ export default function Live() {
   }, [activeId, activeStatus, update]);
   useEffect(() => {
     if (activeStatus !== "active") {
+      tabAudioProvider.current?.stop();
+      setTabAudioStatus("off");
       speechProvider.current.stop();
       if (speechTimer.current) clearTimeout(speechTimer.current);
       speechBuffer.current = "";
@@ -148,6 +170,7 @@ export default function Live() {
   }, [active?.transcript.length, state.settings.autoscroll]);
   useEffect(
     () => () => {
+      tabAudioProvider.current?.stop();
       speechProvider.current.stop();
       screenProvider.current.stop();
       if (speechTimer.current) clearTimeout(speechTimer.current);
@@ -332,6 +355,7 @@ export default function Live() {
   }
   function end() {
     if (!active) return;
+    stopTabAudio();
     cancelAnswer();
     const summary = `${active.title}: ${active.questions.length} questions captured. ${active.notes.length} notes saved.`;
     update((s) => ({
@@ -358,6 +382,8 @@ export default function Live() {
     setDemoPlaying(false);
   }
   async function toggleMic() {
+    if (active?.status !== "active") return;
+    stopTabAudio();
     if (micOn) {
       if (speechTimer.current) clearTimeout(speechTimer.current);
       speechBuffer.current = "";
@@ -700,8 +726,14 @@ export default function Live() {
             </p>
             <span className="eyebrow">SAVED MEMORY</span>
             <p>{state.memories.length} items available to local suggestions</p>
-            <span className="eyebrow">AUDIO</span>
-            <button className="outline-action" onClick={toggleMic}>
+            <span className="eyebrow">AUDIO SOURCE</span>
+            <button className="outline-action" onClick={toggleTabAudio} disabled={active.status !== "active"}>
+              <Monitor size={17} /> {tabAudioStatus === "off" ? "Listen to meeting tab" : tabAudioStatus === "choosing" ? "Cancel tab selection" : "Stop tab audio"}
+            </button>
+            <p role="status" className="small-text">{tabAudioStatus === "listening" ? "Listening to shared tab audio" : tabAudioStatus === "connecting" ? "Connecting tab transcription…" : tabAudioStatus === "choosing" ? "Select a browser tab and enable Share tab audio." : "Tab audio is off"}</p>
+            {tabAudioError && <p role="alert" className="small-text">{tabAudioError}</p>}
+            <p className="small-text muted">For calls in a browser: use desktop Chrome 135+, select the meeting tab, and check Share tab audio. This works independently of your headphones. Only one audio source runs at a time. The browser requires screen-sharing permission, but CLYVO does not read or save video from this audio source.</p>
+            <button className="outline-action" onClick={toggleMic} disabled={active.status !== "active"}>
               {micOn ? <MicOff size={17} /> : <Mic size={17} />}{" "}
               {micOn ? "Stop recognition" : "Use microphone"}
             </button>
@@ -710,7 +742,7 @@ export default function Live() {
                 ? "Browser speech recognition available"
                 : "Manual and simulated input available"}
             </small>
-            <p className="small-text muted">Recognized speech is grouped after a short pause, then answered automatically. While the model is busy, new speech waits for the next answer. Microphone mode hears nearby audio; it does not capture a meeting tab or headphones directly.</p>
+            <p className="small-text muted">Recognized speech is grouped after a short pause, then answered automatically. While the model is busy, new speech waits for the next answer. Use meeting-tab mode for remote participants, or microphone mode for nearby speech. Desktop meeting apps and unshared audio are not captured.</p>
             <p className="small-text muted">
               Speech may be processed by your browser’s speech service. Get
               participants’ permission before transcribing.

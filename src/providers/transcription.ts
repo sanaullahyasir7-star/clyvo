@@ -4,6 +4,7 @@ export interface TranscriptionProvider {
     onText: (text: string) => void,
     onError: (error: string) => void,
     onEnd?: () => void,
+    options?: { audioTrack?: MediaStreamTrack; onStart?: () => void },
   ): void;
   stop(): void;
 }
@@ -18,7 +19,8 @@ type Recognition = {
     | null;
   onerror: ((event: { error: string }) => void) | null;
   onend: (() => void) | null;
-  start: () => void;
+  onstart: (() => void) | null;
+  start: (audioTrack?: MediaStreamTrack) => void;
   stop: () => void;
 };
 export function browserSpeechProvider(): TranscriptionProvider {
@@ -35,6 +37,7 @@ export function browserSpeechProvider(): TranscriptionProvider {
     const previous = recognition;
     recognition = null;
     if (!previous) return;
+    previous.onstart = null;
     previous.onresult = null;
     previous.onerror = null;
     previous.onend = null;
@@ -46,7 +49,7 @@ export function browserSpeechProvider(): TranscriptionProvider {
   }
   return {
     supported: !!Klass,
-    start(onText, onError, onEnd) {
+    start(onText, onError, onEnd, options) {
       if (!Klass) {
         onError(
           "Speech recognition is unavailable in this browser. Use manual input or a simulated conversation.",
@@ -57,6 +60,9 @@ export function browserSpeechProvider(): TranscriptionProvider {
         stop();
         recognition = new Klass();
         const current = recognition;
+        recognition.onstart = () => {
+          if (recognition === current) options?.onStart?.();
+        };
         recognition.onend = () => {
           if (recognition !== current) return;
           recognition = null;
@@ -74,11 +80,14 @@ export function browserSpeechProvider(): TranscriptionProvider {
           stop();
           onError(`Speech recognition: ${e.error}`);
         };
-        recognition.start();
+        if (options?.audioTrack) recognition.start(options.audioTrack);
+        else recognition.start();
       } catch {
         stop();
         onError(
-          "Could not start speech recognition. Check your microphone permission.",
+          options?.audioTrack
+            ? "Could not transcribe this audio track. Use a supported desktop Chrome browser and share the meeting tab with audio."
+            : "Could not start speech recognition. Check your microphone permission.",
         );
       }
     },

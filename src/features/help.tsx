@@ -80,13 +80,12 @@ export default function Help() {
           </p>
           <p>
             The audio monitor in Settings checks your microphone locally. It is
-            separate from speech recognition, which uses the browser’s default
-            microphone.
+            separate from speech recognition. Microphone mode uses the browser’s default microphone. In Live, Listen to meeting tab uses audio from the browser tab you select, including when you wear headphones. Use desktop Chrome 135 or newer and enable Share tab audio in the picker. Unsupported browsers are rejected before capture; CLYVO never silently switches a tab request to your microphone.
           </p>
           <p>
             Screen sharing starts only after you click and select a source.
             Previews and snapshots are temporary and are not included in
-            exports. Stop sharing when you are done.
+            exports. Tab-audio capture also requires browser screen-sharing permission, but its video is not rendered, analyzed, or saved. Audio may be sent to the browser’s speech service for transcription. Pausing or ending Live, switching sources, leaving Live, or stopping sharing releases tab capture. Desktop meeting applications are not supported by tab-audio mode. Stop sharing when you are done.
           </p>
           <p>
             Get participants’ permission before transcribing a conversation.
