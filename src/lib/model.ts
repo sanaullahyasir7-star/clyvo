@@ -35,6 +35,24 @@ export const Session = z.object({
   notes: z.array(z.string()),
   summary: z.string(),
   feedbackId: z.string().optional(),
+  prepContext: z
+    .object({
+      id: z.string(),
+      jobDescription: z.string(),
+      companyContext: z.string(),
+      projects: z.string(),
+    })
+    .optional(),
+  pendingQuestions: z
+    .array(
+      z.object({
+        id: z.string(),
+        text: z.string(),
+        speaker: z.string(),
+        at: z.string(),
+      }),
+    )
+    .optional(),
   practiceQuestions: z.array(z.string()).optional(),
   draftAnswer: z.string().optional(),
   draftNote: z.string().optional(),

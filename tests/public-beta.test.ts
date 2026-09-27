@@ -76,7 +76,7 @@ test("invalid and oversized imports fail safely", () => {
     "[]",
     "123",
     "{}",
-    " ".repeat(5 * 1024 * 1024 + 1),
+    " ".repeat(32 * 1024 * 1024 + 1),
   ])
     assert.throws(() => parseImport(raw));
 });

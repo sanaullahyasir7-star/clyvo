@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Download, Trash2, Upload } from "lucide-react";
 import { useApp } from "@/providers/app";
@@ -16,6 +16,13 @@ import { Button, Card, SectionTitle, Field, download } from "@/components/ui";
 export default function SettingsPage() {
   const { state, update, replace, clear, setError } = useApp();
   const router = useRouter();
+  const importVersion = useRef(0);
+  useEffect(
+    () => () => {
+      importVersion.current++;
+    },
+    [],
+  );
   const [message, setMessage] = useState("");
   const [importText, setImportText] = useState("");
   const [preview, setPreview] = useState<AppState | null>(null);
@@ -25,11 +32,21 @@ export default function SettingsPage() {
     update((s) => ({ ...s, settings: { ...s.settings, [key]: value } }));
   }
   function exportData() {
-    download(
-      `clyvo-export-${new Date().toISOString().slice(0, 10)}.json`,
-      JSON.stringify(exportState(state), null, 2),
-    );
-    setMessage("Backup download requested. Keep the JSON file somewhere safe.");
+    try {
+      download(
+        `clyvo-export-${new Date().toISOString().slice(0, 10)}.json`,
+        JSON.stringify(exportState(state), null, 2),
+      );
+      setMessage(
+        "Backup download requested. Keep the JSON file somewhere safe.",
+      );
+    } catch (error) {
+      setError(
+        error instanceof Error
+          ? error.message
+          : "Export failed. Keep this tab open.",
+      );
+    }
   }
   return (
     <>
@@ -166,18 +183,22 @@ export default function SettingsPage() {
               onChange={async (e) => {
                 const file = e.target.files?.[0];
                 if (!file) return;
+                const version = ++importVersion.current;
+                setPreview(null);
                 setSelectedFile(file.name);
                 try {
-                  if (file.size > 5 * 1024 * 1024)
+                  if (file.size > 32 * 1024 * 1024)
                     throw new Error("File too large");
                   const raw = await file.text();
+                  if (version !== importVersion.current) return;
                   setImportText(raw);
                   setPreview(parseImport(raw));
                   setError("");
                 } catch {
+                  if (version !== importVersion.current) return;
                   setPreview(null);
                   setError(
-                    "Choose a valid CLYVO JSON export up to 5 MB. Your current data was not changed.",
+                    "Choose a valid CLYVO JSON export up to 32 MB. Your current data was not changed.",
                   );
                 }
               }}
@@ -210,7 +231,7 @@ export default function SettingsPage() {
                     replace(
                       mode === "merge"
                         ? mergeStates(state, incoming)
-                        : { ...incoming, activeSessionId: null },
+                        : incoming,
                     );
                     setMessage(
                       "Import applied. Check the saved status above before closing this tab.",

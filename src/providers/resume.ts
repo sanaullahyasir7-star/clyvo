@@ -1,3 +1,4 @@
+import { validateDocxArchive } from "./docx-budget";
 export const MAX_CV_BYTES = 10 * 1024 * 1024;
 export const MAX_CV_CHARACTERS = 100_000;
 export function validateResumeFile(file: { name: string; size: number }) {
@@ -45,6 +46,7 @@ export async function extractResume(
       throw new Error(
         "This is not a readable Word .docx file. Save it again from Word and retry.",
       );
+    validateDocxArchive(bytes);
     try {
       const mammoth = await import("mammoth/mammoth.browser");
       const result = await mammoth.extractRawText({ arrayBuffer: bytes });

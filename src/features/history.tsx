@@ -42,6 +42,17 @@ export default function HistoryPage() {
             {selected.type} · {time(selected.startedAt)} · {selected.status}
           </p>
           <p>{selected.summary || "Session in progress."}</p>
+          {selected.type === "live" && selected.status !== "completed" && (
+            <Link
+              className="button secondary"
+              href="/live"
+              onClick={() =>
+                update((s) => ({ ...s, activeSessionId: selected.id }))
+              }
+            >
+              Resume session
+            </Link>
+          )}
           <h3>Transcript</h3>
           {selected.transcript.map((t) => (
             <div className="transcript" key={t.id}>
@@ -59,12 +70,12 @@ export default function HistoryPage() {
           <h3>Decisions and actions</h3>
           {selected.decisions.map((n, i) => (
             <div className="note" key={`decision-${i}`}>
-              Decision: {n}
+              Decision: {n.replace(/^Decision:\s*/i, "")}
             </div>
           ))}
           {selected.actions.map((n, i) => (
             <div className="note" key={`action-${i}`}>
-              Action: {n}
+              Action: {n.replace(/^Action:\s*/i, "")}
             </div>
           ))}
           <h3>Notes</h3>

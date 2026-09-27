@@ -1,6 +1,10 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import { MicrophoneLease } from "@/providers/audio-monitor";
 export function AudioMonitor() {
+  const lease = useRef(new MicrophoneLease());
+  const version = useRef(0);
+  const [pending, setPending] = useState(false);
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const [device, setDevice] = useState("");
   const [status, setStatus] = useState("Off");
@@ -10,6 +14,9 @@ export function AudioMonitor() {
   const context = useRef<AudioContext | null>(null);
   const frame = useRef(0);
   const stop = () => {
+    version.current++;
+    lease.current.stop();
+    setPending(false);
     cancelAnimationFrame(frame.current);
     stream.current?.getTracks().forEach((t) => t.stop());
     stream.current = null;
@@ -20,6 +27,8 @@ export function AudioMonitor() {
   };
   useEffect(
     () => () => {
+      version.current++;
+      lease.current.stop();
       cancelAnimationFrame(frame.current);
       stream.current?.getTracks().forEach((t) => t.stop());
       void context.current?.close();
@@ -28,20 +37,23 @@ export function AudioMonitor() {
   );
   async function start() {
     stop();
+    const request = version.current;
+    setPending(true);
     try {
       if (!navigator.mediaDevices?.getUserMedia)
         throw new Error("Microphone access is unavailable in this browser.");
-      const media = await navigator.mediaDevices.getUserMedia({
-        audio: device ? { deviceId: { exact: device } } : true,
-      });
+      const media = await lease.current.acquire(() =>
+        navigator.mediaDevices.getUserMedia({
+          audio: device ? { deviceId: { exact: device } } : true,
+        }),
+      );
+      if (!media || request !== version.current) return;
       stream.current = media;
       setMuted(false);
       setStatus("Monitoring");
-      setDevices(
-        (await navigator.mediaDevices.enumerateDevices()).filter(
-          (d) => d.kind === "audioinput",
-        ),
-      );
+      const available = await navigator.mediaDevices.enumerateDevices();
+      if (request !== version.current) return;
+      setDevices(available.filter((d) => d.kind === "audioinput"));
       const ctx = new AudioContext();
       context.current = ctx;
       const analyser = ctx.createAnalyser();
@@ -60,9 +72,13 @@ export function AudioMonitor() {
       };
       tick();
     } catch (e) {
+      if (request !== version.current) return;
+      stop();
       setStatus(
         e instanceof Error ? e.message : "Microphone permission was denied.",
       );
+    } finally {
+      if (request === version.current) setPending(false);
     }
   }
   return (
@@ -98,10 +114,14 @@ export function AudioMonitor() {
       </div>
       <small role="status">{status}</small>
       <div className="row">
-        <button className="outline-action" onClick={start}>
-          {stream.current ? "Reconnect" : "Test microphone"}
+        <button className="outline-action" onClick={start} disabled={pending}>
+          {pending
+            ? "Waiting for microphone…"
+            : stream.current
+              ? "Reconnect"
+              : "Test microphone"}
         </button>
-        {stream.current && (
+        {(stream.current || pending) && (
           <>
             <button
               onClick={() => {

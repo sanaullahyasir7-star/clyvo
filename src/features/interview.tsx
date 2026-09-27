@@ -65,8 +65,10 @@ export default function Interview() {
   const latest =
     state.prep.find((p) => p.id === params.get("id")) || state.prep[0];
   const questions =
-    practiceSession?.practiceQuestions ||
-    latest?.questions ||
+    (practiceSession?.practiceQuestions?.length
+      ? practiceSession.practiceQuestions
+      : undefined) ||
+    (latest?.questions.length ? latest.questions : undefined) ||
     mockAIProvider.prepare(role, company, kind);
   const review = reviewAnswer(responses.at(-1) || "");
   function changeAnswer(value: string) {
@@ -105,7 +107,7 @@ export default function Interview() {
       prep: [p, ...s.prep],
       user: s.user ? { ...s.user, companyContext: context, projects } : null,
     }));
-    setIndex(0);
+    // A new preparation must not reset an unfinished practice.
     router.replace(`/interview?id=${p.id}`);
   }
   function savePractice() {
@@ -412,7 +414,9 @@ export default function Interview() {
                 </p>
                 <Button
                   variant="secondary"
-                  onClick={() => router.push("/live")}
+                  onClick={() =>
+                    router.push(latest ? `/live?prep=${latest.id}` : "/live")
+                  }
                 >
                   Start Live <ArrowRight size={16} />
                 </Button>

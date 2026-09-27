@@ -46,14 +46,15 @@ test("merge preserves existing sessions and deduplicates stable ids", () => {
   assert.equal(merged.sessions.length, state.sessions.length);
   assert.equal(merged.memories.length, state.memories.length);
 });
-test("persisted state survives reload and uses required keys", () => {
+test("persisted state survives reload without duplicate legacy copies", () => {
   const memory = new MemoryStorage();
   const provider = createStorage(memory);
   const state = sampleState();
   provider.save(state);
   assert.deepEqual(provider.load(), state);
-  assert.ok(memory.getItem("clyvo:sessions"));
-  assert.ok(memory.getItem("clyvo:meetings"));
+  assert.ok(memory.getItem("clyvo:state"));
+  assert.equal(memory.getItem("clyvo:sessions"), null);
+  assert.equal(memory.getItem("clyvo:meetings"), null);
   provider.clear();
   assert.equal(memory.length, 0);
 });

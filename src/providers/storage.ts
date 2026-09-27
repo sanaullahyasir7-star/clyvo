@@ -78,20 +78,9 @@ export function createStorage(storage: Storage): StorageProvider {
         } catch {}
       }
       storage.setItem("clyvo:state", snapshot);
-      for (const [key, name] of Object.entries(storageKeys)) {
-        try {
-          storage.setItem(
-            name,
-            JSON.stringify(
-              key === "meetings"
-                ? valid.sessions.filter((s) => s.type === "meeting")
-                : valid[key as keyof AppState],
-            ),
-          );
-        } catch {
-          /* The complete snapshot above remains authoritative. */
-        }
-      }
+      // Legacy keys are read during migration, but the canonical snapshot is
+      // the only current state. Remove old duplicate copies after a successful save.
+      for (const name of Object.values(storageKeys)) storage.removeItem(name);
     },
     clear() {
       for (const name of Object.values(storageKeys)) storage.removeItem(name);
@@ -120,8 +109,8 @@ export const localStorageProvider: StorageProvider = {
   },
 };
 export function parseImport(raw: string): AppState {
-  if (new TextEncoder().encode(raw).length > 5 * 1024 * 1024)
-    throw new Error("Import files must be 5 MB or smaller.");
+  if (new TextEncoder().encode(raw).length > 32 * 1024 * 1024)
+    throw new Error("Import files must be 32 MB or smaller.");
   const data = JSON.parse(raw);
   if (!data || typeof data !== "object" || Array.isArray(data))
     throw new Error("Expected a CLYVO export object.");
@@ -131,12 +120,18 @@ export function parseImport(raw: string): AppState {
 }
 export function exportState(state: AppState) {
   const valid = State.parse(state);
-  return {
+  const exported = {
     ...valid,
-    profile: valid.user,
-    meetings: valid.sessions.filter((s) => s.type === "meeting"),
     exportedAt: new Date().toISOString(),
   };
+  if (
+    new TextEncoder().encode(JSON.stringify(exported, null, 2)).length >
+    32 * 1024 * 1024
+  )
+    throw new Error(
+      "Workspace exceeds the 32 MB backup limit. Export smaller sessions before continuing.",
+    );
+  return exported;
 }
 export function mergeStates(current: AppState, incoming: AppState): AppState {
   const merge = <T extends { id: string }>(a: T[], b: T[]) =>

@@ -1,6 +1,8 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
+import { useSearchParams } from "next/navigation";
+import { selectEvidence } from "@/providers/context";
 import {
   ArrowRight,
   Brain,
@@ -15,11 +17,14 @@ import {
   Square,
 } from "lucide-react";
 import { useApp } from "@/providers/app";
-import { MemoryType, now, uid } from "@/lib/model";
+import { MemoryType, emptyState, now, uid } from "@/lib/model";
 import { LocalAI, answerMessages } from "@/providers/local-ai";
 import { LocalAIControls } from "@/components/local-ai-controls";
 import { mockAIProvider } from "@/providers/ai";
-import { createTabAudioProvider, type TabAudioStatus } from "@/providers/tab-audio";
+import {
+  createTabAudioProvider,
+  type TabAudioStatus,
+} from "@/providers/tab-audio";
 import { browserSpeechProvider, demoLines } from "@/providers/transcription";
 import {
   browserScreenProvider,
@@ -36,13 +41,20 @@ import {
 } from "@/components/ui";
 export default function Live() {
   const { state, update, setError } = useApp();
+  const params = useSearchParams();
+  const [prepId, setPrepId] = useState(params.get("prep") || "");
+  const selectedPrep = state.prep.find((p) => p.id === prepId) || state.prep[0];
   const active = state.sessions.find(
     (s) => s.id === state.activeSessionId && s.status !== "completed",
   );
   const localAI = useRef<LocalAI | null>(null);
-  const [aiStatus, setAIStatus] = useState<"off" | "loading" | "ready" | "error">("off");
+  const [aiStatus, setAIStatus] = useState<
+    "off" | "loading" | "ready" | "error"
+  >("off");
   const [aiProgress, setAIProgress] = useState("");
   const [aiError, setAIError] = useState("");
+  const [testing, setTesting] = useState(false);
+  const [deviceResult, setDeviceResult] = useState("");
   const [generating, setGenerating] = useState(false);
   const [streamed, setStreamed] = useState("");
   const [streamQuestion, setStreamQuestion] = useState("");
@@ -51,6 +63,11 @@ export default function Live() {
   const busyOwner = useRef(0);
   const loadingVersion = useRef(0);
   const speechBuffer = useRef("");
+  const [autoAnswer, setAutoAnswer] = useState(false);
+  const autoAnswerRef = useRef(false);
+  autoAnswerRef.current = autoAnswer;
+  const sessionRef = useRef(active);
+  sessionRef.current = active;
   const speechTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const flushSpeech = useRef<() => void>(() => {});
   function cancelAnswer() {
@@ -69,14 +86,18 @@ export default function Live() {
     busy.current = false;
     busyOwner.current = 0;
     setGenerating(false);
+    setTesting(false);
     setAIStatus("off");
     setAIError("");
   }
   async function enableAI() {
     const token = ++loadingVersion.current;
-    setAIStatus("loading"); setAIError(""); setAIProgress("");
+    setAIStatus("loading");
+    setAIError("");
+    setAIProgress("");
     const service = new LocalAI();
-    localAI.current?.dispose(); localAI.current = service;
+    localAI.current?.dispose();
+    localAI.current = service;
     try {
       await service.load(setAIProgress);
       if (token === loadingVersion.current) setAIStatus("ready");
@@ -84,10 +105,92 @@ export default function Live() {
       if (token !== loadingVersion.current) return;
       service.dispose();
       setAIStatus("error");
-      setAIError(error instanceof Error ? error.message : "The model could not load. Check WebGPU, available memory and network access.");
+      setAIError(
+        error instanceof Error
+          ? error.message
+          : "The model could not load. Check WebGPU, available memory and network access.",
+      );
     }
   }
-  const aiControls = <LocalAIControls status={aiStatus} progress={aiProgress} error={aiError} enable={enableAI} disable={disableAI} />;
+  async function testDevice() {
+    const service = localAI.current;
+    if (!service || busy.current || testing) return;
+    busy.current = true;
+    setTesting(true);
+    setDeviceResult("");
+    const started = performance.now();
+    let first = 0;
+    const timeout = setTimeout(() => {
+      disableAI();
+      setDeviceResult(
+        "Device test exceeded 90 seconds. AI was released. This device has not passed the test.",
+      );
+    }, 90000);
+    try {
+      const fixture = {
+        ...emptyState,
+        user: {
+          name: "Test Candidate",
+          email: "",
+          role: "Engineer",
+          goal: "",
+          resume:
+            "I built an orchard sensor. I measured battery life at 12 hours. No other achievements are supplied.",
+          projects: "",
+          companyContext: "",
+        },
+      };
+      const result = await service.answer(
+        answerMessages(
+          "What did I build and what result did I measure?",
+          fixture,
+        ),
+        () => {
+          if (!first) first = performance.now() - started;
+        },
+      );
+      if (localAI.current === service)
+        setDeviceResult(
+          `First text: ${(first / 1000).toFixed(1)}s. Complete: ${((performance.now() - started) / 1000).toFixed(1)}s. Answer: ${result} — Check that it says orchard sensor and 12 hours without inventing other achievements. This is one synthetic test, not a quality certification.`,
+        );
+    } catch (e) {
+      if (localAI.current === service)
+        setDeviceResult(e instanceof Error ? e.message : "Device test failed.");
+    } finally {
+      clearTimeout(timeout);
+      if (localAI.current === service) {
+        busy.current = false;
+        setTesting(false);
+      }
+    }
+  }
+  const aiControls = (
+    <>
+      <LocalAIControls
+        status={aiStatus}
+        progress={aiProgress}
+        error={aiError}
+        enable={enableAI}
+        disable={disableAI}
+      />
+      <Card>
+        <h3>Check this device</h3>
+        <p>
+          After enabling AI, generate one fictional answer and measure its speed
+          before relying on it.
+        </p>
+        <Button
+          variant="secondary"
+          disabled={aiStatus !== "ready" || generating || testing}
+          onClick={testDevice}
+        >
+          {testing ? "Testing actual generation…" : "Test AI on this device"}
+        </Button>
+        {deviceResult && <p role="status">{deviceResult}</p>}
+      </Card>
+    </>
+  );
+
   const [title, setTitle] = useState("New conversation");
   const [question, setQuestion] = useState("");
   const [mode, setMode] = useState<"short" | "star" | "details">(
@@ -97,9 +200,12 @@ export default function Live() {
   const [demoPlaying, setDemoPlaying] = useState(false);
   const [demoSpeed, setDemoSpeed] = useState(1);
   const [micOn, setMicOn] = useState(false);
+  const micActive = useRef(false);
   const [tabAudioStatus, setTabAudioStatus] = useState<TabAudioStatus>("off");
   const [tabAudioError, setTabAudioError] = useState("");
-  const tabAudioProvider = useRef<ReturnType<typeof createTabAudioProvider> | null>(null);
+  const tabAudioProvider = useRef<ReturnType<
+    typeof createTabAudioProvider
+  > | null>(null);
   function stopTabAudio() {
     tabAudioProvider.current?.stop();
     setTabAudioStatus("off");
@@ -107,14 +213,23 @@ export default function Live() {
     speechBuffer.current = "";
   }
   function toggleTabAudio() {
-    if (tabAudioStatus !== "off") { stopTabAudio(); return; }
+    if (tabAudioStatus !== "off") {
+      stopTabAudio();
+      return;
+    }
     if (active?.status !== "active") return;
-    speechProvider.current.stop(); setMicOn(false);
+    speechProvider.current.stop();
+    setMicOn(false);
+    micActive.current = false;
     if (speechTimer.current) clearTimeout(speechTimer.current);
     speechBuffer.current = "";
     setTabAudioError("");
     tabAudioProvider.current ??= createTabAudioProvider();
-    void tabAudioProvider.current.start(receiveSpeech, setTabAudioStatus, setTabAudioError);
+    void tabAudioProvider.current.start(
+      receiveSpeech,
+      setTabAudioStatus,
+      setTabAudioError,
+    );
   }
   const [screenState, setScreenState] = useState<
     "off" | "active" | "paused" | "ended" | "error"
@@ -134,20 +249,36 @@ export default function Live() {
   const screenProvider = useRef(browserScreenProvider());
   const speechProvider = useRef(browserSpeechProvider());
   const [showResume, setShowResume] = useState(true);
+  const [elapsedExtra, setElapsedExtra] = useState(0);
   useEffect(() => {
-    if (!activeId || activeStatus !== "active") return;
-    const timer = setInterval(() => {
+    setElapsedExtra(0);
+    if (!activeId || activeStatus !== "active" || showResume) return;
+    let checkpoint = Date.now();
+    const persist = () => {
+      const seconds = Math.floor((Date.now() - checkpoint) / 1000);
+      if (!seconds) return;
+      checkpoint += seconds * 1000;
       update((s) => ({
         ...s,
         sessions: s.sessions.map((x) =>
           x.id === activeId
-            ? { ...x, durationSeconds: x.durationSeconds + 1 }
+            ? { ...x, durationSeconds: x.durationSeconds + seconds }
             : x,
         ),
       }));
+      setElapsedExtra(0);
+    };
+    const timer = setInterval(() => {
+      setElapsedExtra(Math.floor((Date.now() - checkpoint) / 1000));
+      if (Date.now() - checkpoint >= 30000) persist();
     }, 1000);
-    return () => clearInterval(timer);
-  }, [activeId, activeStatus, update]);
+    window.addEventListener("pagehide", persist);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener("pagehide", persist);
+      persist();
+    };
+  }, [activeId, activeStatus, showResume, update]);
   useEffect(() => {
     if (activeStatus !== "active") {
       tabAudioProvider.current?.stop();
@@ -237,9 +368,16 @@ export default function Live() {
     const s = createSession(
       "live",
       title || "New conversation",
-      state.prep[0]?.company,
-      state.prep[0]?.role || state.user?.role,
+      selectedPrep?.company,
+      selectedPrep?.role || state.user?.role,
     );
+    if (selectedPrep)
+      s.prepContext = {
+        id: selectedPrep.id,
+        jobDescription: selectedPrep.jobDescription,
+        companyContext: selectedPrep.companyContext,
+        projects: selectedPrep.projects,
+      };
     update((a) => ({
       ...a,
       sessions: [s, ...a.sessions],
@@ -248,9 +386,28 @@ export default function Live() {
     setShowResume(false);
     setDemoIndex(0);
   }
-  async function addQuestion(text: string, speaker = "Interviewer") {
+  function queueQuestion(text: string, speaker = "Selected question") {
+    const current = sessionRef.current;
+    if (!current || current.status !== "active" || !text.trim()) return;
+    const item = { id: uid(), text: text.trim(), speaker, at: now() };
+    update((s) => ({
+      ...s,
+      sessions: s.sessions.map((x) =>
+        x.id === current.id
+          ? { ...x, pendingQuestions: [...(x.pendingQuestions || []), item] }
+          : x,
+      ),
+    }));
+    setQuestion("");
+  }
+  async function addQuestion(
+    text: string,
+    speaker = "Interviewer",
+    pendingId?: string,
+  ) {
     if (!active || active.status !== "active" || !text.trim()) return;
-    if (busy.current) { setQuestion(text); return; }
+    if (busy.current) return;
+    busy.current = true;
     const usingAI = aiStatus === "ready";
     const answer = usingAI ? null : mockAIProvider.answer(text, state, active);
     update((s) => ({
@@ -259,6 +416,9 @@ export default function Live() {
         x.id === active.id
           ? {
               ...x,
+              pendingQuestions: (x.pendingQuestions || []).filter(
+                (q) => q.id !== pendingId,
+              ),
               transcript: [
                 ...x.transcript,
                 { id: uid(), at: now(), speaker, text: text.trim() },
@@ -276,28 +436,62 @@ export default function Live() {
       const watchdog = setTimeout(() => {
         if (busyOwner.current !== token || !localAI.current) return;
         disableAI();
-        setAIError("Generation took over 90 seconds. The model was released; try a shorter question or use template guidance.");
+        setAIError(
+          "Generation took over 90 seconds. The model was released; try a shorter question or use template guidance.",
+        );
       }, 90000);
       busyOwner.current = token;
-      busy.current = true; setGenerating(true); setStreamed(""); setStreamQuestion(text); setAIError("");
+      busy.current = true;
+      setGenerating(true);
+      setStreamed("");
+      setStreamQuestion(text);
+      setAIError("");
       try {
-        const result = await localAI.current.answer(answerMessages(text, state, active, mode), partial => {
-          if (token === generation.current) setStreamed(partial);
-        });
+        const result = await localAI.current.answer(
+          answerMessages(text, state, active, mode),
+          (partial) => {
+            if (token === generation.current) setStreamed(partial);
+          },
+        );
         if (token !== generation.current) return;
-        const generated = { id: uid(), question: text, intent: "local-ai", short: result, star: result, details: result, talkingPoints: [], followUps: ["Explain your reasoning and give an example."], at: now(), pinned: false };
-        update(s => ({ ...s, sessions: s.sessions.map(x => x.id === sessionId && x.status === "active" ? { ...x, responses: [...x.responses, generated] } : x) }));
+        const generated = {
+          id: uid(),
+          question: text,
+          intent: "local-ai",
+          short: result,
+          star: result,
+          details: result,
+          talkingPoints: [],
+          followUps: ["Explain your reasoning and give an example."],
+          at: now(),
+          pinned: false,
+        };
+        update((s) => ({
+          ...s,
+          sessions: s.sessions.map((x) =>
+            x.id === sessionId && x.status === "active"
+              ? { ...x, responses: [...x.responses, generated] }
+              : x,
+          ),
+        }));
       } catch (error) {
-        if (token === generation.current) setAIError(error instanceof Error ? error.message : "Generation failed. Your question is saved; retry or turn off AI to use templates.");
+        if (token === generation.current)
+          setAIError(
+            error instanceof Error
+              ? error.message
+              : "Generation failed. Your question is saved; retry or turn off AI to use templates.",
+          );
       } finally {
         clearTimeout(watchdog);
         // A disposed service may never settle; disableAI also resets this state.
         if (busyOwner.current === token && localAI.current) {
-          busy.current = false; setGenerating(false); setStreamed("");
-          flushSpeech.current();
+          busy.current = false;
+          setGenerating(false);
+          setStreamed("");
         }
       }
     }
+    if (!usingAI) busy.current = false;
     if (state.settings.sound) {
       try {
         const AudioContextClass = window.AudioContext;
@@ -314,16 +508,66 @@ export default function Live() {
       } catch {}
     }
   }
-  addQuestionRef.current = addQuestion;
+  addQuestionRef.current = queueQuestion;
+  const nextPending = active?.pendingQuestions?.[0];
+  useEffect(() => {
+    if (
+      !busy.current &&
+      nextPending &&
+      activeStatus === "active" &&
+      !showResume
+    )
+      void addQuestion(nextPending.text, nextPending.speaker, nextPending.id);
+    // Generation ownership is held by busy; refreshed render supplies current context.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    nextPending?.id,
+    generating,
+    activeStatus,
+    showResume,
+    aiStatus,
+    testing,
+  ]);
   flushSpeech.current = () => {
-    if (busy.current || !speechBuffer.current || activeStatus !== "active") return;
+    const current = sessionRef.current;
+    if (!speechBuffer.current || current?.status !== "active") return;
     const text = speechBuffer.current;
     speechBuffer.current = "";
-    void addQuestionRef.current(text);
+    // This opt-in only applies to a remote tab. Microphone speech is never
+    // assumed to be the interviewer. All raw speech is saved independently.
+    if (
+      autoAnswerRef.current &&
+      /\?|\b(what|why|how|when|where|which|describe|explain|tell me|walk me|could you|can you)\b/i.test(
+        text,
+      )
+    )
+      addQuestionRef.current(text, "Remote question (automatic)");
   };
   function receiveSpeech(text: string) {
-    speechBuffer.current = `${speechBuffer.current} ${text}`.trim().slice(-3000);
-    setQuestion(speechBuffer.current);
+    const current = sessionRef.current;
+    if (!current || current.status !== "active" || !text.trim()) return;
+    const remote = tabAudioProvider.current !== null && !micActive.current;
+    update((s) => ({
+      ...s,
+      sessions: s.sessions.map((x) =>
+        x.id === current.id
+          ? {
+              ...x,
+              transcript: [
+                ...x.transcript,
+                {
+                  id: uid(),
+                  at: now(),
+                  speaker: remote ? "Remote audio" : "Microphone",
+                  text,
+                },
+              ],
+            }
+          : x,
+      ),
+    }));
+    if (!remote) return;
+    speechBuffer.current += (speechBuffer.current ? " " : "") + text;
     if (speechTimer.current) clearTimeout(speechTimer.current);
     speechTimer.current = setTimeout(() => flushSpeech.current(), 1800);
   }
@@ -397,6 +641,7 @@ export default function Live() {
       );
       return;
     }
+    micActive.current = true;
     setMicOn(true);
     speechProvider.current.start(
       receiveSpeech,
@@ -425,7 +670,7 @@ export default function Live() {
   }
   shortcuts.current = {
     ask: () => {
-      if (question.trim()) addQuestion(question);
+      if (question.trim()) queueQuestion(question);
     },
     note: () => note(false),
     memory: () => note(true),
@@ -444,8 +689,45 @@ export default function Live() {
           <h2>Start a conversation</h2>
           <p>
             Ask manually, use browser speech recognition, or play a simulated
-            interview. Enable free local AI above for generated answers from your CV.
+            interview. Enable free local AI above for generated answers from
+            your CV.
           </p>
+          {state.sessions
+            .filter((s) => s.type === "live" && s.status !== "completed")
+            .map((s) => (
+              <Button
+                key={s.id}
+                variant="secondary"
+                onClick={() => {
+                  update((a) => ({ ...a, activeSessionId: s.id }));
+                  setShowResume(true);
+                }}
+              >
+                Resume {s.title}
+              </Button>
+            ))}
+          <p>
+            Preparation:{" "}
+            {selectedPrep
+              ? `${selectedPrep.company} · ${selectedPrep.role}`
+              : "Profile context"}
+          </p>
+          <label className="field">
+            <span>Use preparation</span>
+            <select
+              value={selectedPrep?.id || ""}
+              onChange={(e) => setPrepId(e.target.value)}
+            >
+              <option value="" disabled>
+                Choose saved preparation
+              </option>
+              {state.prep.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.company} · {p.role}
+                </option>
+              ))}
+            </select>
+          </label>
           <Field label="Session title" value={title} onChange={setTitle} />
           <Button onClick={start}>
             Start Live <ArrowRight size={17} />
@@ -497,10 +779,14 @@ export default function Live() {
           </span>
           <h1>{active.title}</h1>
           <span className="muted">
-            {Math.floor(active.durationSeconds / 60)
+            {Math.floor((active.durationSeconds + elapsedExtra) / 60)
               .toString()
               .padStart(2, "0")}
-            :{(active.durationSeconds % 60).toString().padStart(2, "0")} elapsed
+            :
+            {((active.durationSeconds + elapsedExtra) % 60)
+              .toString()
+              .padStart(2, "0")}{" "}
+            elapsed
           </span>
         </div>
         <div className="row">
@@ -533,6 +819,37 @@ export default function Live() {
         </div>
       </div>
       {aiControls}
+      <Card>
+        <h3>Question queue · {active.pendingQuestions?.length || 0}</h3>
+        <p>
+          Captured speech stays in the transcript. Choose “Answer this” for any
+          line, or enable automatic remote questions below.
+        </p>
+        {(active.pendingQuestions || []).map((q) => (
+          <div key={q.id}>
+            <p>{q.text}</p>
+            <button
+              onClick={() =>
+                update((s) => ({
+                  ...s,
+                  sessions: s.sessions.map((x) =>
+                    x.id === active.id
+                      ? {
+                          ...x,
+                          pendingQuestions: (x.pendingQuestions || []).filter(
+                            (item) => item.id !== q.id,
+                          ),
+                        }
+                      : x,
+                  ),
+                }))
+              }
+            >
+              Remove queued question
+            </button>
+          </div>
+        ))}
+      </Card>
       <div className={`live-grid ${compact ? "compact" : ""}`}>
         <Card className="live-panel">
           <div className="panel-title">
@@ -549,6 +866,12 @@ export default function Live() {
                       `· ${new Date(t.at).toLocaleTimeString()}`}
                   </small>
                   <p>{t.text}</p>
+                  <button
+                    disabled={active.status !== "active"}
+                    onClick={() => queueQuestion(t.text)}
+                  >
+                    Answer this
+                  </button>
                 </div>
               ))
             ) : (
@@ -571,12 +894,14 @@ export default function Live() {
               <button
                 onClick={() => {
                   if (demoIndex < demoLines.length) {
-                    addQuestion(demoLines[demoIndex]);
+                    queueQuestion(demoLines[demoIndex]);
                     setDemoIndex((i) => i + 1);
                   }
                 }}
                 disabled={
-                  generating || active.status !== "active" || demoIndex >= demoLines.length
+                  generating ||
+                  active.status !== "active" ||
+                  demoIndex >= demoLines.length
                 }
               >
                 Next
@@ -617,9 +942,16 @@ export default function Live() {
               />{" "}
               CLYVO suggests
             </h3>
-            <span>{response?.intent === "local-ai" ? "AI DRAFT · VERIFY" : "TEMPLATE GUIDANCE"}</span>
+            <span>
+              {response?.intent === "local-ai"
+                ? "AI DRAFT · VERIFY"
+                : "TEMPLATE GUIDANCE"}
+            </span>
           </div>
-          <p className="small-text muted">Choose a format before asking. AI answers are drafts; format changes apply to the next question.</p>
+          <p className="small-text muted">
+            Choose a format before asking. AI answers are drafts; format changes
+            apply to the next question.
+          </p>
           <div className="tabs" role="tablist">
             {(["short", "star", "details"] as const).map((m) => (
               <button
@@ -633,11 +965,16 @@ export default function Live() {
               </button>
             ))}
           </div>
-          {generating && <div className="answer-content" aria-busy="true">
-            <small>GENERATING ON THIS DEVICE</small><h3>{streamQuestion}</h3>
-            <p className="answer-text">{streamed || "Thinking…"}</p>
-            <Button variant="secondary" onClick={cancelAnswer}>Stop answer</Button>
-          </div>}
+          {generating && (
+            <div className="answer-content" aria-busy="true">
+              <small>GENERATING ON THIS DEVICE</small>
+              <h3>{streamQuestion}</h3>
+              <p className="answer-text">{streamed || "Thinking…"}</p>
+              <Button variant="secondary" onClick={cancelAnswer}>
+                Stop answer
+              </Button>
+            </div>
+          )}
           {!generating && response ? (
             <div className="answer-content">
               <small>QUESTION · {response.intent.replaceAll("-", " ")}</small>
@@ -677,23 +1014,25 @@ export default function Live() {
                   <Pin size={15} /> {response.pinned ? "Unpin" : "Pin"}
                 </button>
                 <button
-                  onClick={() => addQuestion(response.followUps[0], "CLYVO")}
+                  onClick={() => queueQuestion(response.followUps[0], "CLYVO")}
                 >
                   Follow-up <ArrowRight size={14} />
                 </button>
               </div>
             </div>
-          ) : !generating && (
-            <Empty
-              title="Ready when you are"
-              copy="A concise suggestion will appear after a question is captured."
-            />
+          ) : (
+            !generating && (
+              <Empty
+                title="Ready when you are"
+                copy="A concise suggestion will appear after a question is captured."
+              />
+            )
           )}
           <form
             className="ask-form"
             onSubmit={(e) => {
               e.preventDefault();
-              addQuestion(question);
+              queueQuestion(question);
             }}
           >
             <input
@@ -706,7 +1045,7 @@ export default function Live() {
             <button
               className="button"
               type="submit"
-              disabled={generating || !question.trim() || active.status !== "active"}
+              disabled={!question.trim() || active.status !== "active"}
             >
               Ask <ArrowRight size={16} />
             </button>
@@ -721,19 +1060,74 @@ export default function Live() {
             <span className="eyebrow">PROFILE</span>
             <strong>{state.user?.role || "Add your role"}</strong>
             <p>
-              {state.user?.resume ||
+              {state.user?.resume?.slice(0, 1200) ||
                 "Add your experience during onboarding or in settings."}
+            </p>
+            <p className="small-text">
+              Profile preview only. The full saved CV is searched for relevant
+              excerpts.
             </p>
             <span className="eyebrow">SAVED MEMORY</span>
             <p>{state.memories.length} items available to local suggestions</p>
+            <span className="eyebrow">RELEVANT CONTEXT EXCERPTS</span>
+            {selectEvidence(
+              streamQuestion || response?.question || question,
+              state,
+              active,
+            )
+              .slice(0, 3)
+              .map((e, i) => (
+                <p key={i}>
+                  <strong>{e.source}</strong>: {e.text}
+                </p>
+              ))}
             <span className="eyebrow">AUDIO SOURCE</span>
-            <button className="outline-action" onClick={toggleTabAudio} disabled={active.status !== "active"}>
-              <Monitor size={17} /> {tabAudioStatus === "off" ? "Listen to meeting tab" : tabAudioStatus === "choosing" ? "Cancel tab selection" : "Stop tab audio"}
+            <label>
+              <input
+                type="checkbox"
+                checked={autoAnswer}
+                onChange={(e) => setAutoAnswer(e.target.checked)}
+              />{" "}
+              Automatically answer likely remote questions
+            </label>
+            <button
+              className="outline-action"
+              onClick={toggleTabAudio}
+              disabled={active.status !== "active"}
+            >
+              <Monitor size={17} />{" "}
+              {tabAudioStatus === "off"
+                ? "Listen to meeting tab"
+                : tabAudioStatus === "choosing"
+                  ? "Cancel tab selection"
+                  : "Stop tab audio"}
             </button>
-            <p role="status" className="small-text">{tabAudioStatus === "listening" ? "Listening to shared tab audio" : tabAudioStatus === "connecting" ? "Connecting tab transcription…" : tabAudioStatus === "choosing" ? "Select a browser tab and enable Share tab audio." : "Tab audio is off"}</p>
-            {tabAudioError && <p role="alert" className="small-text">{tabAudioError}</p>}
-            <p className="small-text muted">For calls in a browser: use desktop Chrome 135+, select the meeting tab, and check Share tab audio. This works independently of your headphones. Only one audio source runs at a time. The browser requires screen-sharing permission, but CLYVO does not read or save video from this audio source.</p>
-            <button className="outline-action" onClick={toggleMic} disabled={active.status !== "active"}>
+            <p role="status" className="small-text">
+              {tabAudioStatus === "listening"
+                ? "Listening to shared tab audio"
+                : tabAudioStatus === "connecting"
+                  ? "Connecting tab transcription…"
+                  : tabAudioStatus === "choosing"
+                    ? "Select a browser tab and enable Share tab audio."
+                    : "Tab audio is off"}
+            </p>
+            {tabAudioError && (
+              <p role="alert" className="small-text">
+                {tabAudioError}
+              </p>
+            )}
+            <p className="small-text muted">
+              For calls in a browser: use desktop Chrome 135+, select the
+              meeting tab, and check Share tab audio. This works independently
+              of your headphones. Only one audio source runs at a time. The
+              browser requires screen-sharing permission, but CLYVO does not
+              read or save video from this audio source.
+            </p>
+            <button
+              className="outline-action"
+              onClick={toggleMic}
+              disabled={active.status !== "active"}
+            >
               {micOn ? <MicOff size={17} /> : <Mic size={17} />}{" "}
               {micOn ? "Stop recognition" : "Use microphone"}
             </button>
@@ -742,7 +1136,14 @@ export default function Live() {
                 ? "Browser speech recognition available"
                 : "Manual and simulated input available"}
             </small>
-            <p className="small-text muted">Recognized speech is grouped after a short pause, then answered automatically. While the model is busy, new speech waits for the next answer. Use meeting-tab mode for remote participants, or microphone mode for nearby speech. Desktop meeting apps and unshared audio are not captured.</p>
+            <p className="small-text muted">
+              Speech is saved as transcript lines. Automatic remote questions
+              use a simple phrase detector and may need correction. Microphone
+              speech requires selecting Answer this. Queued questions wait
+              separately while the model is busy. Use meeting-tab mode for
+              remote participants, or microphone mode for nearby speech. Desktop
+              meeting apps and unshared audio are not captured.
+            </p>
             <p className="small-text muted">
               Speech may be processed by your browser’s speech service. Get
               participants’ permission before transcribing.

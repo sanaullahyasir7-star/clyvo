@@ -114,7 +114,7 @@ export default function Help() {
           <details>
             <summary>An import was rejected</summary>
             <p>
-              Choose an unmodified CLYVO JSON export up to 5 MB. Review the
+              Choose an unmodified CLYVO JSON export up to 32 MB. Review the
               preview before merging or replacing. Files with an unsupported
               schema are rejected rather than silently changed.
             </p>

@@ -1,7 +1,8 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { Button, Field } from "./ui";
-import { extractResume, MAX_CV_CHARACTERS } from "@/providers/resume";
+import { MAX_CV_CHARACTERS } from "@/providers/resume";
+import { readResume } from "@/providers/resume-task";
 export function ResumeImport({ onApply }: { onApply: (text: string) => void }) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
@@ -9,9 +10,11 @@ export function ResumeImport({ onApply }: { onApply: (text: string) => void }) {
   const [preview, setPreview] = useState<string | null>(null);
   const [name, setName] = useState("");
   const request = useRef(0);
+  const abort = useRef<AbortController | null>(null);
   useEffect(
     () => () => {
       request.current++;
+      abort.current?.abort();
     },
     [],
   );
@@ -28,14 +31,20 @@ export function ResumeImport({ onApply }: { onApply: (text: string) => void }) {
             e.target.value = "";
             if (!file) return;
             const current = ++request.current;
+            abort.current?.abort();
+            abort.current = new AbortController();
             setBusy(true);
             setError("");
             setPreview(null);
             setName(file.name);
             try {
-              const text = await extractResume(file, (m) => {
-                if (current === request.current) setMessage(m);
-              });
+              const text = await readResume(
+                file,
+                (m) => {
+                  if (current === request.current) setMessage(m);
+                },
+                abort.current.signal,
+              );
               if (current === request.current) {
                 setPreview(text);
                 setMessage(
@@ -62,6 +71,11 @@ export function ResumeImport({ onApply }: { onApply: (text: string) => void }) {
         original file is not uploaded or saved. Scanned PDFs need selectable
         text; older .doc files must be saved as .docx.
       </p>
+      {busy && (
+        <Button variant="secondary" onClick={() => abort.current?.abort()}>
+          Cancel reading
+        </Button>
+      )}
       {message && (
         <p role="status" aria-live="polite">
           {message}
