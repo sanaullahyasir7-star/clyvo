@@ -24,6 +24,7 @@ export class LocalAI {
   private worker?: Worker;
   private engine?: WebWorkerMLCEngine;
   private version = 0;
+  constructor(engine?: WebWorkerMLCEngine) { this.engine = engine; }
   async load(progress: (text: string) => void) {
     this.dispose();
     const version = this.version;

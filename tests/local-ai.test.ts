@@ -19,3 +19,29 @@ test("unsupported devices fail before downloading a model", async () => {
   await assert.rejects(ai.load(() => {}), /WebGPU/);
   ai.dispose();
 });
+
+test("answer streams partial text and returns the final completion", async () => {
+  const partials: string[] = [];
+  const engine = { chat: { completions: { create: async () => (async function* () {
+    yield { choices: [{ delta: { content: "First " } }] };
+    yield { choices: [{ delta: { content: "answer" } }] };
+  })() } } };
+  const ai = new LocalAI(engine as unknown as import("@mlc-ai/web-llm").WebWorkerMLCEngine);
+  assert.equal(await ai.answer(answerMessages("Question", emptyState), text => partials.push(text)), "First answer");
+  assert.deepEqual(partials, ["First ", "First answer"]);
+});
+test("disposed generation never emits another chunk", async () => {
+  const engine = { chat: { completions: { create: async () => (async function* () {
+    ai.dispose();
+    yield { choices: [{ delta: { content: "late" } }] };
+  })() } } };
+  const ai = new LocalAI(engine as unknown as import("@mlc-ai/web-llm").WebWorkerMLCEngine);
+  await assert.rejects(ai.answer(answerMessages("Question", emptyState), () => assert.fail("Late output")), /cancelled/);
+});
+test("empty model output is a visible error", async () => {
+  const engine = { chat: { completions: { create: async () => (async function* () {
+    yield { choices: [] };
+  })() } } };
+  const ai = new LocalAI(engine as unknown as import("@mlc-ai/web-llm").WebWorkerMLCEngine);
+  await assert.rejects(ai.answer(answerMessages("Question", emptyState), () => {}), /no answer/);
+});

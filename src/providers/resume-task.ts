@@ -14,7 +14,8 @@ export function readResume(
       worker.terminate();
       signal.removeEventListener("abort", abort);
       if (error) reject(new Error(error));
-      else resolve(text || "");
+      else if (text?.trim()) resolve(text);
+      else reject(new Error("No readable text was found. Try a text-based CV."));
     };
     const abort = () => finish("CV import cancelled.");
     const timer = setTimeout(
@@ -26,6 +27,7 @@ export function readResume(
     );
     signal.addEventListener("abort", abort, { once: true });
     worker.onmessage = (e) => {
+      if (e.data?.channel !== "clyvo-cv") return;
       if (e.data.progress) progress(e.data.progress);
       else finish(e.data.error, e.data.text);
     };

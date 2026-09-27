@@ -128,3 +128,31 @@ test("DOCX expansion budget rejects excessive declared uncompressed data", () =>
   v.setUint16(56, 1, true);
   assert.throws(() => validateDocxArchive(b), /25 MB/);
 });
+
+test("CV reader ignores unrelated worker messages and rejects empty results", async () => {
+  const { readResume } = await import("../src/providers/resume-task");
+  const previous = Object.getOwnPropertyDescriptor(globalThis, "Worker");
+  const instances: FakeWorker[] = [];
+  class FakeWorker {
+    onmessage?: (e: { data: unknown }) => void;
+    onerror?: () => void;
+    terminated = false;
+    constructor() { instances.push(this); }
+    postMessage() {}
+    terminate() { this.terminated = true; }
+  }
+  Object.defineProperty(globalThis, "Worker", { configurable: true, value: FakeWorker });
+  try {
+    const pending = readResume(new File(["CV"], "cv.txt"), () => {}, new AbortController().signal);
+    instances.at(-1)!.onmessage!({ data: { sourceName: "worker", action: "ready" } });
+    assert.equal(instances.at(-1)!.terminated, false);
+    instances.at(-1)!.onmessage!({ data: { channel: "clyvo-cv", text: "Real extracted experience" } });
+    assert.equal(await pending, "Real extracted experience");
+    const empty = readResume(new File(["CV"], "cv.txt"), () => {}, new AbortController().signal);
+    instances.at(-1)!.onmessage!({ data: { channel: "clyvo-cv", text: "" } });
+    await assert.rejects(empty, /No readable/);
+  } finally {
+    if (previous) Object.defineProperty(globalThis, "Worker", previous);
+    else Reflect.deleteProperty(globalThis, "Worker");
+  }
+});
