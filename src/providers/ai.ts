@@ -29,6 +29,21 @@ export const detectIntent = (q: string) =>
   intents.find(([re]) => re.test(q))?.[1] ??
   (q.trim().endsWith("?") ? "general-question" : "general");
 const clip = (s: string, n = 200) => s.trim().slice(0, n);
+
+function evidenceSentence(question: string, context: string): string {
+  if (!context) return "I don’t have a matching example in the CV details saved here, so I’d answer this with a real example from my experience.";
+  const first = context.split(/(?<=[.!?])\s+/)[0]?.trim() || context;
+  const clean = first.replace(/[.!?]+$/, "");
+  if (/tell me about yourself|introduce yourself/i.test(question))
+    return `I’m an early-career professional focused on this role, and one relevant part of my background is ${clean}.`;
+  if (/project|built|worked on|challenge|difficult|problem/i.test(question))
+    return `One example from my experience is ${clean}. I can explain my specific contribution, the decisions I made, and the result I can verify.`;
+  if (/strength/i.test(question))
+    return `A strength I can support with an example is the work reflected in ${clean}. I would describe my own contribution and the evidence for its impact.`;
+  if (/why.*(company|here|us)/i.test(question))
+    return `This role interests me because it connects with my experience in ${clean}. I’d like to apply that background while learning the team’s specific needs.`;
+  return `Based on my saved experience, ${clean}. I would connect this example to the question and be clear about what I personally did.`;
+}
 export const mockAIProvider: AIProvider = {
   answer(question, state, session) {
     const intent = detectIntent(question);
@@ -60,23 +75,21 @@ export const mockAIProvider: AIProvider = {
       relevant || resume || "your own experience",
       150,
     ).replace(/[.!?]+$/, "");
-    let main =
-      "Answer directly, then give one specific example from your experience.";
+    let main = evidenceSentence(question, context);
     if (intent === "introduction")
-      main = `Introduce your path toward ${role}. Mention ${context} and end with why this role fits your next step.`;
+      main = `${evidenceSentence(question, context)} I’m interested in ${role} because it is a next step where I can contribute and keep growing.`;
     else if (
       ["project", "technical", "coding", "system-design"].includes(intent)
     )
-      main = `Use this relevant context: ${context}. Explain your choice, how you tested it, and what you would improve.`;
+      main = `${evidenceSentence(question, context)} I would explain the approach, tradeoffs, how I tested it, and what I would improve. Those details should match what I actually did.`;
     else if (["challenge", "conflict", "leadership"].includes(intent))
-      main = `Choose one real situation from your experience. Describe your role, a concrete action, and an outcome you can verify. ${relevant ? `Relevant context: ${clip(relevant, 100)}` : ""}`;
+      main = `${evidenceSentence(question, context)} I would then explain the situation, my responsibility, the action I took, and only an outcome I can verify.`;
     else if (intent === "why-company")
-      main = `Connect your interest in ${company} with the ${role} work. ${companyContext ? `Use your saved context: ${clip(companyContext, 140)}.` : "Mention one company fact you have verified."} Connect it to a skill you can contribute.`;
+      main = `${evidenceSentence(question, context)} I’m interested in ${company} and the ${role} work. ${companyContext ? `A company detail I have saved is: ${clip(companyContext, 140)}.` : "I would add one current company fact I have verified."} I’d connect that to a skill I can contribute.`;
     else if (intent === "weakness")
-      main =
-        "Choose a genuine area you are improving. Give a recent example of the steps you took and what changed.";
+      main = "One area I’m working to improve is [name a genuine skill]. Recently, I [specific step you took], and I’m checking progress by [honest measure]. Replace the brackets with a true example before using this draft.";
     else if (intent === "strength")
-      main = `Choose a strength supported by your experience. ${relevant ? `For example: ${clip(relevant, 100)}` : "Add a specific example before speaking."}`;
+      main = `${evidenceSentence(question, context)} I’d keep the example specific and explain how it would help in ${role}.`;
     else if (intent === "salary")
       main =
         "Ask about the scope and compensation range for the role. State a range only if you have researched it and are comfortable sharing it.";

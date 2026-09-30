@@ -63,7 +63,7 @@ export default function Live() {
   const busyOwner = useRef(0);
   const loadingVersion = useRef(0);
   const speechBuffer = useRef("");
-  const [autoAnswer, setAutoAnswer] = useState(false);
+  const [autoAnswer, setAutoAnswer] = useState(true);
   const autoAnswerRef = useRef(false);
   autoAnswerRef.current = autoAnswer;
   const sessionRef = useRef(active);
@@ -533,8 +533,8 @@ export default function Live() {
     if (!speechBuffer.current || current?.status !== "active") return;
     const text = speechBuffer.current;
     speechBuffer.current = "";
-    // This opt-in only applies to a remote tab. Microphone speech is never
-    // assumed to be the interviewer. All raw speech is saved independently.
+    // All raw speech is saved independently. The user can turn off automatic
+    // question detection if the captured source includes their own voice.
     if (
       autoAnswerRef.current &&
       /\?|\b(what|why|how|when|where|which|describe|explain|tell me|walk me|could you|can you)\b/i.test(
@@ -566,7 +566,6 @@ export default function Live() {
           : x,
       ),
     }));
-    if (!remote) return;
     speechBuffer.current += (speechBuffer.current ? " " : "") + text;
     if (speechTimer.current) clearTimeout(speechTimer.current);
     speechTimer.current = setTimeout(() => flushSpeech.current(), 1800);
@@ -942,10 +941,14 @@ export default function Live() {
               />{" "}
               CLYVO suggests
             </h3>
-            <span>
+          <span>
               {response?.intent === "local-ai"
-                ? "AI DRAFT · VERIFY"
-                : "TEMPLATE GUIDANCE"}
+                ? "LOCAL AI DRAFT · VERIFY"
+                : response
+                  ? "TEMPLATE DRAFT · VERIFY"
+                  : aiStatus === "ready"
+                    ? "LOCAL AI READY"
+                    : "TEMPLATE MODE"}
             </span>
           </div>
           <p className="small-text muted">
@@ -1088,7 +1091,7 @@ export default function Live() {
                 checked={autoAnswer}
                 onChange={(e) => setAutoAnswer(e.target.checked)}
               />{" "}
-              Automatically answer likely remote questions
+            Automatically answer likely interview questions from captured audio
             </label>
             <button
               className="outline-action"
@@ -1137,9 +1140,10 @@ export default function Live() {
                 : "Manual and simulated input available"}
             </small>
             <p className="small-text muted">
-              Speech is saved as transcript lines. Automatic remote questions
-              use a simple phrase detector and may need correction. Microphone
-              speech requires selecting Answer this. Queued questions wait
+              Speech is saved as transcript lines. Likely questions from either
+              selected meeting-tab audio or the microphone are queued
+              automatically using a simple phrase detector and may need
+              correction. You can also choose “Answer this.” Queued questions wait
               separately while the model is busy. Use meeting-tab mode for
               remote participants, or microphone mode for nearby speech. Desktop
               meeting apps and unshared audio are not captured.

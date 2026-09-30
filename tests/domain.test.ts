@@ -74,6 +74,26 @@ test("saved project context changes local responses", () => {
   assert.equal(detectIntent("Tell me about yourself"), "introduction");
   assert.equal(detectIntent("Explain the system design"), "system-design");
 });
+test("template fallback drafts a direct evidence-based answer", () => {
+  const state = structuredClone(emptyState);
+  state.user = {
+    name: "Test Candidate",
+    email: "",
+    role: "Engineer",
+    goal: "",
+    resume: "I built an orchard sensor and measured battery life at 12 hours.",
+    projects: "",
+    companyContext: "",
+  };
+  const answer = mockAIProvider.answer(
+    "Tell me about a project you built",
+    state,
+  );
+  assert.match(answer.short, /One example from my experience/);
+  assert.match(answer.short, /orchard sensor/);
+  assert.match(answer.short, /result I can verify/);
+  assert.doesNotMatch(answer.short, /Choose one real situation/);
+});
 test("search includes transcript, note and meeting content", () => {
   const state = sampleState();
   assert.ok(
